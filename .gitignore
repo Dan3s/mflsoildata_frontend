@@ -1,0 +1,10 @@
+node_modules
+src/node_modules
+.next
+src/.next
+out
+coverage
+.env
+.env.local
+.DS_Store
+/docs
