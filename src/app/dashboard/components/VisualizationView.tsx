@@ -9,6 +9,8 @@ import type {
   VisualizationTimeSeriesResponse,
 } from "@/app/services";
 import { ApiError, visualizationService } from "@/app/services";
+import PlotlyFigure from "./PlotlyFigure";
+import type { PlotParams } from "react-plotly.js";
 
 type VisualizationViewProps = {
   projectOptions: FilterOption[];
@@ -17,7 +19,7 @@ type VisualizationViewProps = {
 
 type TabKey = "serie" | "sitio" | "correlacion";
 
-type ChartType = "Líneas" | "Barras" | "Dispersión";
+type SeriesChartMode = "Líneas" | "Barras" | "Boxplot" | "Histograma";
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "serie", label: "Serie Temporal" },
@@ -25,7 +27,11 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "correlacion", label: "Correlación" },
 ];
 
-const formatTick = (value: number) => value.toFixed(1).replace(".0", "");
+const seriesChartModes: SeriesChartMode[] = ["Líneas", "Barras", "Boxplot", "Histograma"];
+
+const seriesPalette = ["#16a34a", "#2563eb", "#f97316", "#7c3aed", "#0891b2", "#ef4444"];
+
+const sitePalette = ["#2563eb", "#16a34a", "#f97316", "#7c3aed", "#0891b2", "#ef4444"];
 
 const formatVariableLabel = (variable: VariableRead) => {
   const baseLabel = variable.name?.trim() || variable.variable_code?.trim() || `Variable ${variable.id}`;
@@ -41,6 +47,185 @@ const isUsableSeries = (data: VisualizationTimeSeriesResponse) =>
 const isDateFormattingError = (message: string) =>
   /nonetype/i.test(message) || /strftime/i.test(message) || /date/i.test(message) || /null/i.test(message);
 
+const getFiniteNumbers = (values: number[]) => values.filter((value) => Number.isFinite(value));
+
+const createPlotLayout = (overrides?: PlotParams["layout"]) : PlotParams["layout"] => ({
+  autosize: true,
+  margin: { l: 48, r: 24, t: 24, b: 48 },
+  paper_bgcolor: "rgba(0,0,0,0)",
+  plot_bgcolor: "rgba(0,0,0,0)",
+  hovermode: "x unified",
+  legend: {
+    orientation: "h",
+    x: 0,
+    y: 1.12,
+    font: { size: 11 },
+  },
+  ...overrides,
+});
+
+const createLineFigure = (data: VisualizationTimeSeriesResponse): Pick<PlotParams, "data" | "layout"> => ({
+  data: data.series.map((series, seriesIndex) => ({
+    x: data.labels,
+    y: series.values,
+    type: "scatter" as const,
+    mode: "lines+markers",
+    name: series.variable_name,
+    line: { color: seriesPalette[seriesIndex % seriesPalette.length], width: 3 },
+    marker: { size: 7, color: seriesPalette[seriesIndex % seriesPalette.length] },
+    connectgaps: false,
+  }) as PlotParams["data"][number]),
+  layout: createPlotLayout({
+    xaxis: { title: { text: "Tiempo" }, showgrid: true, gridcolor: "#eef2f7" },
+    yaxis: { title: { text: "Valor" }, showgrid: true, gridcolor: "#eef2f7" },
+  }),
+});
+
+const createBarFigure = (data: VisualizationTimeSeriesResponse): Pick<PlotParams, "data" | "layout"> => ({
+  data: data.series.map((series, seriesIndex) => ({
+    x: data.labels,
+    y: series.values,
+    type: "bar" as const,
+    name: series.variable_name,
+    marker: { color: seriesPalette[seriesIndex % seriesPalette.length] },
+  }) as PlotParams["data"][number]),
+  layout: createPlotLayout({
+    barmode: "group",
+    xaxis: { title: { text: "Tiempo" }, showgrid: true, gridcolor: "#eef2f7" },
+    yaxis: { title: { text: "Valor" }, showgrid: true, gridcolor: "#eef2f7" },
+  }),
+});
+
+const createBoxFigure = (data: VisualizationTimeSeriesResponse): Pick<PlotParams, "data" | "layout"> => ({
+  data: data.series.map((series, seriesIndex) => ({
+    y: getFiniteNumbers(series.values),
+    type: "box" as const,
+    name: series.variable_name,
+    boxmean: "sd",
+    marker: { color: seriesPalette[seriesIndex % seriesPalette.length] },
+    line: { color: seriesPalette[seriesIndex % seriesPalette.length] },
+  }) as PlotParams["data"][number]),
+  layout: createPlotLayout({
+    boxmode: "group",
+    yaxis: { title: { text: "Valor" }, showgrid: true, gridcolor: "#eef2f7" },
+    xaxis: { title: { text: "Variable" } },
+  }),
+});
+
+const createHistogramFigure = (data: VisualizationTimeSeriesResponse): Pick<PlotParams, "data" | "layout"> => ({
+  data: data.series.map((series, seriesIndex) => ({
+    x: getFiniteNumbers(series.values),
+    type: "histogram" as const,
+    name: series.variable_name,
+    opacity: 0.65,
+    marker: { color: seriesPalette[seriesIndex % seriesPalette.length] },
+    nbinsx: Math.min(40, Math.max(8, Math.ceil(getFiniteNumbers(series.values).length / 4))),
+  }) as PlotParams["data"][number]),
+  layout: createPlotLayout({
+    barmode: "overlay",
+    xaxis: { title: { text: "Valor" }, showgrid: true, gridcolor: "#eef2f7" },
+    yaxis: { title: { text: "Frecuencia" }, showgrid: true, gridcolor: "#eef2f7" },
+  }),
+});
+
+const createSiteComparisonFigure = (data: VisualizationBySiteResponse): Pick<PlotParams, "data" | "layout"> => ({
+  data: data.series.map((series, seriesIndex) => ({
+    x: data.categories,
+    y: series.values,
+    type: "bar" as const,
+    name: series.name,
+    marker: { color: sitePalette[seriesIndex % sitePalette.length] },
+  }) as PlotParams["data"][number]),
+  layout: createPlotLayout({
+    barmode: "group",
+    xaxis: { title: { text: "Sitio" }, showgrid: false, tickangle: -30 },
+    yaxis: { title: { text: "Valor" }, showgrid: true, gridcolor: "#eef2f7" },
+  }),
+});
+
+const buildTrendline = (points: VisualizationCorrelationResponse["points"]) => {
+  if (!points.length) {
+    return null;
+  }
+
+  const n = points.length;
+  const sumX = points.reduce((accumulator, point) => accumulator + point.x, 0);
+  const sumY = points.reduce((accumulator, point) => accumulator + point.y, 0);
+  const sumXY = points.reduce((accumulator, point) => accumulator + point.x * point.y, 0);
+  const sumXX = points.reduce((accumulator, point) => accumulator + point.x * point.x, 0);
+
+  const denominator = n * sumXX - sumX * sumX;
+  if (denominator === 0) {
+    return null;
+  }
+
+  const slope = (n * sumXY - sumX * sumY) / denominator;
+  const intercept = (sumY - slope * sumX) / n;
+  const minX = Math.min(...points.map((point) => point.x));
+  const maxX = Math.max(...points.map((point) => point.x));
+
+  return {
+    slope,
+    intercept,
+    x: [minX, maxX],
+    y: [slope * minX + intercept, slope * maxX + intercept],
+  };
+};
+
+const createCorrelationFigure = (data: VisualizationCorrelationResponse, showTrendline: boolean): Pick<PlotParams, "data" | "layout"> => {
+  const points = data.points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  const trendline = showTrendline ? buildTrendline(points) : null;
+
+  return {
+    data: [
+      {
+        x: points.map((point) => point.x),
+        y: points.map((point) => point.y),
+        type: "scatter" as const,
+        mode: "markers" as const,
+        name: "Observaciones",
+        marker: { color: "#2563eb", size: 8, opacity: 0.8 },
+        text: points.map((point) => `x: ${point.x.toFixed(3)}<br>y: ${point.y.toFixed(3)}`),
+        hovertemplate: "%{text}<extra></extra>",
+      } as PlotParams["data"][number],
+      ...(trendline
+        ? [
+            {
+              x: trendline.x,
+              y: trendline.y,
+              type: "scatter" as const,
+              mode: "lines" as const,
+              name: "Línea de tendencia",
+              line: { color: "#991b1b", width: 3, dash: "dash" },
+              hovertemplate: `y = ${trendline.slope.toFixed(4)}x + ${trendline.intercept.toFixed(4)}<extra></extra>`,
+            } as PlotParams["data"][number],
+          ]
+        : []),
+    ],
+    layout: createPlotLayout({
+      hovermode: "closest",
+      xaxis: { title: { text: "Variable X" }, showgrid: true, gridcolor: "#eef2f7" },
+      yaxis: { title: { text: "Variable Y" }, showgrid: true, gridcolor: "#eef2f7" },
+      annotations: trendline
+        ? [
+            {
+              text: `y = ${trendline.slope.toFixed(4)}x + ${trendline.intercept.toFixed(4)}`,
+              xref: "paper",
+              yref: "paper",
+              x: 0.02,
+              y: 0.98,
+              showarrow: false,
+              bgcolor: "rgba(255,255,255,0.9)",
+              bordercolor: "#d1d5db",
+              borderwidth: 1,
+              font: { color: "#111827", size: 12 },
+            },
+          ]
+        : [],
+    }),
+  };
+};
+
 function ChartShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -53,165 +238,9 @@ function ChartShell({ title, subtitle, children }: { title: string; subtitle: st
   );
 }
 
-function LineChart({ data }: { data: VisualizationTimeSeriesResponse }) {
-  const width = 920;
-  const height = 380;
-  const padding = 48;
-  const allValues = data.series.flatMap((series) => series.values);
-  const maxValue = Math.max(8, ...allValues, 1);
-  const minValue = Math.min(0, ...allValues, 0);
-
-  const scaleX = (index: number) => padding + (index * (width - padding * 2)) / Math.max(data.labels.length - 1, 1);
-  const scaleY = (value: number) => height - padding - ((value - minValue) * (height - padding * 2)) / Math.max(maxValue - minValue, 1);
-
-  const colors = ["#22c55e", "#3b82f6", "#f97316", "#8b5cf6"];
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-[22rem] w-full">
-      {[0, 2, 4, 6, 8].map((tick) => {
-        const y = scaleY(tick);
-
-        return (
-          <g key={tick}>
-            <line x1={padding} x2={width - padding} y1={y} y2={y} stroke="#e5e7eb" strokeDasharray="3 4" />
-            <text x={padding - 10} y={y + 4} textAnchor="end" className="fill-gray-400 text-[10px]">
-              {formatTick(tick)}
-            </text>
-          </g>
-        );
-      })}
-
-      {data.labels.map((label, index) => {
-        const x = scaleX(index);
-
-        return (
-          <g key={label}>
-            <line x1={x} x2={x} y1={padding} y2={height - padding} stroke="#e5e7eb" strokeDasharray="3 4" />
-            <text x={x} y={height - 18} textAnchor="middle" className="fill-gray-500 text-[10px]">
-              {label}
-            </text>
-          </g>
-        );
-      })}
-
-      {data.series.map((series, seriesIndex) => {
-        const path = series.values
-          .map((value, index) => `${index === 0 ? "M" : "L"} ${scaleX(index)} ${scaleY(value)}`)
-          .join(" ");
-
-        return (
-          <g key={series.variable_id}>
-            <path d={path} fill="none" stroke={colors[seriesIndex % colors.length]} strokeWidth="2.5" />
-            {series.values.map((value, index) => (
-              <circle
-                key={`${series.variable_id}-${index}`}
-                cx={scaleX(index)}
-                cy={scaleY(value)}
-                r="4"
-                fill="white"
-                stroke={colors[seriesIndex % colors.length]}
-                strokeWidth="2"
-              />
-            ))}
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-function BarChart({ data }: { data: VisualizationBySiteResponse }) {
-  const width = 920;
-  const height = 380;
-  const padding = 48;
-  const colors = ["#3b82f6", "#22c55e", "#f97316", "#8b5cf6"];
-  const hasVisibleBars = data.series.some((series) => series.values.some((value) => Number.isFinite(value) && value > 0));
-  const maxValue = Math.max(8, ...data.series.flatMap((series) => series.values), 1);
-  const chartHeight = height - padding * 2;
-  const groupWidth = (width - padding * 2) / Math.max(data.categories.length, 1);
-  const barWidth = Math.max(3, Math.min(26, groupWidth / Math.max(data.series.length, 1) - 8));
-
-  if (!data.categories.length || !data.series.length || !hasVisibleBars) {
-    return <div className="flex h-[22rem] items-center justify-center text-center text-sm text-amber-600">No hay valores de sitio suficientes para construir esta comparación.</div>;
-  }
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-[22rem] w-full">
-      {[0, 2, 4, 6, 8].map((tick) => {
-        const y = height - padding - (tick / 8) * chartHeight;
-
-        return (
-          <g key={tick}>
-            <line x1={padding} x2={width - padding} y1={y} y2={y} stroke="#e5e7eb" strokeDasharray="3 4" />
-            <text x={padding - 10} y={y + 4} textAnchor="end" className="fill-gray-400 text-[10px]">
-              {formatTick(tick)}
-            </text>
-          </g>
-        );
-      })}
-
-      {data.categories.map((category, categoryIndex) => {
-        const groupStart = padding + categoryIndex * groupWidth;
-        const labelX = groupStart + groupWidth / 2;
-        const label = category.length > 14 ? `${category.slice(0, 11)}...` : category;
-
-        return (
-          <g key={category}>
-            <line x1={labelX} x2={labelX} y1={padding} y2={height - padding} stroke="#e5e7eb" strokeDasharray="3 4" />
-            <text x={labelX} y={height - 16} textAnchor="middle" className="fill-gray-500 text-[10px]">
-              <title>{category}</title>
-              {label}
-            </text>
-            {data.series.map((series, seriesIndex) => {
-              const value = series.values[categoryIndex];
-              if (!Number.isFinite(value ?? NaN)) {
-                return null;
-              }
-
-              const barHeight = (value / maxValue) * chartHeight;
-              const x = groupStart + seriesIndex * (barWidth + 6) + 4;
-              const y = height - padding - barHeight;
-
-              return <rect key={`${series.name}-${category}`} x={x} y={y} width={barWidth} height={barHeight} rx="3" fill={colors[seriesIndex % colors.length]} />;
-            })}
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-function ScatterChart({ data }: { data: VisualizationCorrelationResponse }) {
-  const points = data.points;
-  const width = 100;
-  const height = 100;
-  const minX = Math.min(...points.map((point) => point.x), 0);
-  const maxX = Math.max(...points.map((point) => point.x), 1);
-  const minY = Math.min(...points.map((point) => point.y), 0);
-  const maxY = Math.max(...points.map((point) => point.y), 1);
-
-  const scaleX = (value: number) => 10 + ((value - minX) / Math.max(maxX - minX, 1)) * 80;
-  const scaleY = (value: number) => 90 - ((value - minY) / Math.max(maxY - minY, 1)) * 80;
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-[22rem] w-full">
-      {[20, 40, 60, 80].map((tick) => (
-        <g key={tick}>
-          <line x1={10} x2={90} y1={tick} y2={tick} stroke="#e5e7eb" strokeDasharray="3 4" />
-          <line x1={tick} x2={tick} y1={10} y2={90} stroke="#e5e7eb" strokeDasharray="3 4" />
-        </g>
-      ))}
-
-      {points.map((point, index) => (
-        <circle key={`${point.x}-${point.y}-${index}`} cx={scaleX(point.x)} cy={scaleY(point.y)} r="2.6" fill="#3b82f6" />
-      ))}
-    </svg>
-  );
-}
-
 export default function VisualizationView({ projectOptions, variables }: VisualizationViewProps) {
   const [tab, setTab] = useState<TabKey>("serie");
-  const [chartType, setChartType] = useState<ChartType>("Líneas");
+  const [chartType, setChartType] = useState<SeriesChartMode>("Líneas");
   const [projectId, setProjectId] = useState<string>(projectOptions[0]?.id ? String(projectOptions[0].id) : "");
   const [primaryVariableId, setPrimaryVariableId] = useState<string>(variables[0]?.id ? String(variables[0].id) : "");
   const [secondaryVariableId, setSecondaryVariableId] = useState<string>(variables[1]?.id ? String(variables[1].id) : variables[0]?.id ? String(variables[0].id) : "");
@@ -221,6 +250,7 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [emptyReason, setEmptyReason] = useState<string | null>(null);
+  const [showTrendline, setShowTrendline] = useState(true);
 
   const variableChoices = useMemo(
     () => variables.map((variable) => ({ value: String(variable.id), label: formatVariableLabel(variable) })),
@@ -268,7 +298,7 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
       secondary_variable_id: secondaryIdNumber,
       variable_x_id: primaryIdNumber,
       variable_y_id: secondaryIdNumber,
-      chart_type: chartType,
+      chart_type: tab === "serie" ? "Líneas" : tab === "sitio" ? "Barras" : "Dispersión",
     };
 
     const request =
@@ -334,7 +364,7 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
     return () => {
       active = false;
     };
-  }, [chartType, primaryVariableId, projectId, secondaryVariableId, tab]);
+  }, [primaryVariableId, projectId, secondaryVariableId, tab]);
 
   const primaryVariableLabel = variableChoices.find((variable) => variable.value === primaryVariableId)?.label ?? "Variable principal";
   const secondaryVariableLabel = variableChoices.find((variable) => variable.value === secondaryVariableId)?.label ?? "Variable secundaria";
@@ -357,33 +387,56 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
     }
 
     if (tab === "serie" && timeSeries) {
-      return chartType === "Barras" ? <BarChart data={{ categories: timeSeries.labels, series: timeSeries.series.map((series) => ({ name: series.variable_name, values: series.values })) }} /> : <LineChart data={timeSeries} />;
+      const figure =
+        chartType === "Barras"
+          ? createBarFigure(timeSeries)
+          : chartType === "Boxplot"
+            ? createBoxFigure(timeSeries)
+            : chartType === "Histograma"
+              ? createHistogramFigure(timeSeries)
+              : createLineFigure(timeSeries);
+
+      return (
+        <div className="h-[28rem]">
+          <PlotlyFigure
+            data={figure.data}
+            layout={figure.layout}
+            config={{ responsive: true, displayModeBar: true, displaylogo: false }}
+          />
+        </div>
+      );
     }
 
     if (tab === "sitio" && siteComparison) {
-      return <BarChart data={siteComparison} />;
+      const figure = createSiteComparisonFigure(siteComparison);
+
+      return (
+        <div className="h-[28rem]">
+          <PlotlyFigure
+            data={figure.data}
+            layout={figure.layout}
+            config={{ responsive: true, displayModeBar: true, displaylogo: false }}
+          />
+        </div>
+      );
     }
 
     if (tab === "correlacion" && correlation) {
-      return <ScatterChart data={correlation} />;
+      const figure = createCorrelationFigure(correlation, showTrendline);
+
+      return (
+        <div className="h-[28rem]">
+          <PlotlyFigure
+            data={figure.data}
+            layout={figure.layout}
+            config={{ responsive: true, displayModeBar: true, displaylogo: false }}
+          />
+        </div>
+      );
     }
 
     return <div className="flex h-[24rem] items-center justify-center text-sm text-gray-500">No hay datos para mostrar con la configuración actual.</div>;
-  }, [chartType, correlation, error, loading, siteComparison, tab, timeSeries]);
-
-  const legend = useMemo(() => {
-    if (tab === "serie") {
-      return timeSeries?.series.map((series, index) => ({ label: series.variable_name, color: index === 0 ? "bg-green-500" : "bg-blue-500" })) ?? [];
-    }
-
-    if (tab === "sitio") {
-      return siteComparison?.series.map((series, index) => ({ label: series.name, color: index === 0 ? "bg-blue-500" : "bg-green-500" })) ?? [];
-    }
-
-    return [
-      { label: `${primaryVariableLabel} vs ${secondaryVariableLabel}`, color: "bg-blue-500" },
-    ];
-  }, [primaryVariableLabel, secondaryVariableLabel, siteComparison?.series, tab, timeSeries?.series]);
+  }, [chartType, correlation, emptyReason, error, loading, showTrendline, siteComparison, tab, timeSeries]);
 
   const exportUrl = useMemo(() => {
     const projectIdNumber = projectId ? toNumber(projectId) : undefined;
@@ -475,12 +528,27 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
 
             <label className="block">
               <span className="mb-2 block text-sm text-gray-700">Tipo de Gráfica</span>
-              <select value={chartType} onChange={(event) => setChartType(event.target.value as ChartType)} className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white">
-                <option value="Líneas">Líneas</option>
-                <option value="Barras">Barras</option>
-                <option value="Dispersión">Dispersión</option>
+              <select value={chartType} onChange={(event) => setChartType(event.target.value as SeriesChartMode)} className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white">
+                {seriesChartModes.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode}
+                  </option>
+                ))}
               </select>
             </label>
+
+            {tab === "correlacion" ? (
+              <label className="block">
+                <span className="mb-2 block text-sm text-gray-700">Tendencia</span>
+                <button
+                  type="button"
+                  onClick={() => setShowTrendline((current) => !current)}
+                  className={`flex h-11 w-full items-center justify-center rounded-lg border px-3 text-sm shadow-sm transition ${showTrendline ? "border-green-200 bg-green-50 text-green-700" : "border-gray-200 bg-gray-50 text-gray-700"}`}
+                >
+                  {showTrendline ? "Ocultar línea" : "Mostrar línea"}
+                </button>
+              </label>
+            ) : null}
           </div>
         </section>
 
@@ -501,15 +569,6 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
           title={tab === "serie" ? "Evolución Temporal de Variables" : tab === "sitio" ? "Comparación por Sitio de Muestreo" : "Correlación entre Variables"}
           subtitle={tab === "serie" ? `Variación de ${primaryVariableLabel} y ${secondaryVariableLabel} a lo largo del tiempo` : tab === "sitio" ? "Comparación de valores entre diferentes sitios para las variables seleccionadas" : "Relación exploratoria entre variables seleccionadas"}
         >
-          <div className="mb-4 flex flex-wrap gap-4 text-sm">
-            {legend.map((item) => (
-              <div key={item.label} className="flex items-center gap-2 text-gray-600">
-                <span className={`h-2.5 w-2.5 rounded-sm ${item.color}`} />
-                <span>{item.label}</span>
-              </div>
-            ))}
-          </div>
-
           {chartBody}
         </ChartShell>
       </div>

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { dashboardService } from "@/app/services";
+import { dashboardService, mapService } from "@/app/services";
+import MapView from "../components/MapView";
 import VisualizationView from "../components/VisualizationView";
 
 const sectionMap: Record<string, { title: string; description: string }> = {
@@ -39,6 +40,20 @@ export default async function DashboardSectionPage({
     const variables = variablesResult.status === "fulfilled" ? variablesResult.value : [];
 
     return <VisualizationView projectOptions={projectOptions} variables={variables} />;
+  }
+
+  if (slug === "mapa") {
+    const [projectOptionsResult, summaryResult, sitesResult] = await Promise.allSettled([
+      dashboardService.getProjectsOptions(),
+      mapService.getSummary(),
+      mapService.getSites(),
+    ]);
+
+    const projectOptions = projectOptionsResult.status === "fulfilled" ? projectOptionsResult.value : [];
+    const summary = summaryResult.status === "fulfilled" ? summaryResult.value : null;
+    const sites = sitesResult.status === "fulfilled" ? sitesResult.value.items : [];
+
+    return <MapView projectOptions={projectOptions} initialSummary={summary} initialSites={sites} />;
   }
 
   if (!section) {

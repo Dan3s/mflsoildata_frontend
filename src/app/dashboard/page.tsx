@@ -189,7 +189,7 @@ export default async function DashboardPage({
                       </td>
                       <td className="border-b border-gray-100 px-4 py-4 align-top">{formatValue(record.value)}</td>
                       <td className="border-b border-gray-100 px-4 py-4 align-top">{record.unit ?? "—"}</td>
-                      <td className="border-b border-gray-100 px-4 py-4 align-top">{record.date ?? "—"}</td>
+                      <td className="border-b border-gray-100 px-4 py-4 align-top">{record.event_date ?? record.date ?? "—"}</td>
                       <td className="border-b border-gray-100 px-4 py-4 align-top">{record.laboratory ?? "—"}</td>
                       <td className="border-b border-gray-100 px-4 py-4 align-top">
                         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${badgeStyles[record.status] ?? "bg-gray-100 text-gray-600"}`}>

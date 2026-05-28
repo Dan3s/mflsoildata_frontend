@@ -94,6 +94,7 @@ export interface Measurement {
   value_text?: string | null;
   value_boolean?: boolean | null;
   value_date?: string | null;
+  event_date?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -114,6 +115,9 @@ export interface MeasurementCreate {
 export interface MeasurementFilters {
   sample_id?: number;
   variable_id?: number;
+  start_date?: string;
+  end_date?: string;
+  offset?: number;
   skip?: number;
   limit?: number;
 }
@@ -150,6 +154,7 @@ export interface DashboardRecord {
   value: string | number | boolean | null;
   unit: string | null;
   date: string | null;
+  event_date?: string | null;
   laboratory: string | null;
   status: string;
 }
@@ -223,5 +228,68 @@ export interface VisualizationPoint {
 export interface VisualizationCorrelationResponse {
   points: VisualizationPoint[];
   correlation?: number;
+}
+
+export interface MapSummary {
+  total_sites?: number;
+  active_sites?: number;
+  inactive_sites?: number;
+  selected_sites?: number;
+  sites_with_coordinates?: number;
+  sites_without_coordinates?: number;
+  measurement_count?: number;
+  last_updated?: string | null;
+}
+
+export interface MapSite {
+  id: number;
+  project_id: number;
+  site_code: string;
+  project_name?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  status?: string | null;
+  measurement_count?: number | null;
+  last_updated?: string | null;
+  is_selected?: boolean | null;
+  is_active?: boolean | null;
+  country?: string | null;
+  admin_1?: string | null;
+  admin_2?: string | null;
+  admin_3?: string | null;
+  altitude_m?: number | null;
+}
+
+export interface MapSiteDetail extends MapSite {
+  description?: string | null;
+  attributes?: Record<string, string | number | boolean | null> | null;
+  metadata?: Record<string, string | number | boolean | null> | null;
+  variables?: Array<{
+    id?: number;
+    name?: string | null;
+    variable_code?: string | null;
+    unit?: string | null;
+    value?: string | number | boolean | null;
+  }> | null;
+}
+
+export interface MapSitesResponse {
+  items: MapSite[];
+  total?: number;
+  skip?: number;
+  limit?: number;
+}
+
+export interface MapFilters {
+  project_id?: number;
+  status?: string;
+  search?: string;
+  bbox?: string;
+  north?: number;
+  south?: number;
+  east?: number;
+  west?: number;
+  skip?: number;
+  limit?: number;
 }
 
