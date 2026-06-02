@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { mapService, type FilterOption, type MapSite, type MapSiteDetail, type MapSummary } from "@/app/services";
 
 type MapViewProps = {
@@ -12,20 +12,8 @@ type MapViewProps = {
 
 type MapDraftFilters = {
   projectId: string;
-  status: string;
   search: string;
 };
-
-const STATUS_COLORS: Record<string, { dot: string; border: string; ring: string; text: string }> = {
-  activo: { dot: "bg-emerald-400", border: "border-emerald-400/60", ring: "ring-emerald-400/30", text: "text-emerald-300" },
-  active: { dot: "bg-emerald-400", border: "border-emerald-400/60", ring: "ring-emerald-400/30", text: "text-emerald-300" },
-  validado: { dot: "bg-sky-400", border: "border-sky-400/60", ring: "ring-sky-400/30", text: "text-sky-300" },
-  pendiente: { dot: "bg-amber-400", border: "border-amber-400/60", ring: "ring-amber-400/30", text: "text-amber-300" },
-  inactivo: { dot: "bg-slate-400", border: "border-slate-400/60", ring: "ring-slate-400/30", text: "text-slate-300" },
-  inactive: { dot: "bg-slate-400", border: "border-slate-400/60", ring: "ring-slate-400/30", text: "text-slate-300" },
-};
-
-const DEFAULT_COLORS = { dot: "bg-fuchsia-400", border: "border-fuchsia-400/60", ring: "ring-fuchsia-400/30", text: "text-fuchsia-300" };
 
 const LeafletMap = dynamic(() => import("./LeafletMap"), { ssr: false });
 
@@ -58,31 +46,21 @@ const formatDateTime = (value?: string | null) => {
 
 const toQuery = (filters: MapDraftFilters) => ({
   project_id: filters.projectId ? Number(filters.projectId) : undefined,
-  status: filters.status || undefined,
   search: filters.search || undefined,
 });
 
 const isRenderableCoordinate = (site: MapSite) =>
   typeof site.latitude === "number" && Number.isFinite(site.latitude) && typeof site.longitude === "number" && Number.isFinite(site.longitude);
 
-const getStatusKey = (status?: string | null) => (status?.trim().toLowerCase() || "sin estado");
-
-const getStatusPalette = (status?: string | null) => STATUS_COLORS[getStatusKey(status)] ?? DEFAULT_COLORS;
-
-
 const summarizeSummary = (summary: MapSummary | null, sites: MapSite[]) => {
   const coordinateSites = sites.filter(isRenderableCoordinate);
-  const activeSites = sites.filter((site) => {
-    const status = getStatusKey(site.status);
-    return site.is_active === true || status.includes("activo") || status.includes("active");
-  });
 
   return {
     totalSites: summary?.total_sites ?? sites.length,
-    activeSites: summary?.active_sites ?? activeSites.length,
     selectedSites: summary?.selected_sites ?? sites.filter((site) => site.is_selected).length,
     coordinateSites: summary?.sites_with_coordinates ?? coordinateSites.length,
     measurementCount: summary?.measurement_count ?? sites.reduce((accumulator, site) => accumulator + (site.measurement_count ?? 0), 0),
+    lastEventDate: summary?.last_event_date ?? sites.find((site) => site.last_event_date)?.last_event_date ?? null,
   };
 };
 
@@ -114,20 +92,17 @@ function SiteListItem({
   selected: boolean;
   onClick: () => void;
 }) {
-  const palette = getStatusPalette(site.status);
-
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`w-full rounded-2xl border p-4 text-left transition ${selected ? `border-green-500 bg-green-50 shadow-sm ring-2 ${palette.ring}` : "border-gray-200 bg-white hover:border-green-200 hover:bg-green-50/40"}`}
+      className={`w-full rounded-2xl border p-4 text-left transition ${selected ? "border-green-500 bg-green-50 shadow-sm ring-2 ring-green-500/30" : "border-gray-200 bg-white hover:border-green-200 hover:bg-green-50/40"}`}
     >
       <div className="flex items-start gap-3">
-        <span className={`mt-1 h-3 w-3 rounded-full ${palette.dot} ${selected ? `ring-4 ${palette.ring}` : ""}`} />
+        <span className={`mt-1 h-3 w-3 rounded-full ${selected ? "bg-green-500 ring-4 ring-green-500/30" : "bg-green-400"}`} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
             <h4 className="truncate text-sm font-semibold text-gray-900">{site.site_code}</h4>
-            <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] ${palette.border} ${palette.text}`}>{site.status ?? "Sin estado"}</span>
           </div>
           <p className="mt-1 text-xs text-gray-500">{site.project_name ?? `Proyecto ${site.project_id}`}</p>
           <div className="mt-3 flex items-center justify-between gap-3 text-xs text-gray-500">
@@ -141,8 +116,8 @@ function SiteListItem({
 }
 
 export default function MapView({ projectOptions, initialSites, initialSummary }: MapViewProps) {
-  const [draftFilters, setDraftFilters] = useState<MapDraftFilters>({ projectId: "", status: "", search: "" });
-  const [activeFilters, setActiveFilters] = useState<MapDraftFilters>({ projectId: "", status: "", search: "" });
+  const [draftFilters, setDraftFilters] = useState<MapDraftFilters>({ projectId: "", search: "" });
+  const [activeFilters, setActiveFilters] = useState<MapDraftFilters>({ projectId: "", search: "" });
   const [sites, setSites] = useState<MapSite[]>(initialSites);
   const [summary, setSummary] = useState<MapSummary | null>(initialSummary);
   const [selectedSiteId, setSelectedSiteId] = useState<number | null>(initialSites[0]?.id ?? null);
@@ -150,29 +125,12 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
   const [detailLoading, setDetailLoading] = useState(false);
   const [isRefreshing, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
   const [listLimit, setListLimit] = useState(24);
-
-  const statusOptions = useMemo(() => {
-    const statuses = new Map<string, string>();
-
-    sites.forEach((site) => {
-      const status = site.status?.trim();
-      if (status) {
-        statuses.set(status.toLowerCase(), status);
-      }
-    });
-
-    return Array.from(statuses.values()).sort((left, right) => left.localeCompare(right));
-  }, [sites]);
+  const hasHydratedRef = useRef(false);
 
   const summaryValues = useMemo(() => summarizeSummary(summary, sites), [sites, summary]);
   const visibleSites = useMemo(() => sites.filter(isRenderableCoordinate), [sites]);
   const displayedSites = useMemo(() => sites.slice(0, listLimit), [listLimit, sites]);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (!sites.length) {
@@ -191,7 +149,8 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
   }, [sites]);
 
   useEffect(() => {
-    if (!mounted) {
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true;
       return;
     }
 
@@ -225,7 +184,7 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
     return () => {
       cancelled = true;
     };
-  }, [activeFilters, mounted, startTransition]);
+  }, [activeFilters, startTransition]);
 
   useEffect(() => {
     if (!selectedSiteId) {
@@ -266,7 +225,7 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
   };
 
   const handleReset = () => {
-    const resetFilters = { projectId: "", status: "", search: "" };
+    const resetFilters = { projectId: "", search: "" };
     setDraftFilters(resetFilters);
     setActiveFilters(resetFilters);
   };
@@ -288,11 +247,10 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
       "project_name",
       "latitude",
       "longitude",
-      "status",
       "measurement_count",
       "last_updated",
+      "last_event_date",
       "is_selected",
-      "is_active",
       "country",
       "admin_1",
       "admin_2",
@@ -302,12 +260,13 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
       "attributes",
       "metadata",
       "variables",
+      "recent_variables",
     ]);
 
     const entries: Array<[string, string | number | boolean | null]> = [];
 
     Object.entries(selectedSite as unknown as Record<string, unknown>).forEach(([key, value]) => {
-      if (knownKeys.has(key) || value === null || value === undefined) {
+      if (knownKeys.has(key) || key.toLowerCase().includes("status") || value === null || value === undefined) {
         return;
       }
 
@@ -322,7 +281,7 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
 
     const appendRecord = (record?: Record<string, string | number | boolean | null> | null) => {
       Object.entries(record ?? {}).forEach(([key, value]) => {
-        if (value !== null && value !== undefined) {
+        if (!key.toLowerCase().includes("status") && value !== null && value !== undefined) {
           entries.push([key, value]);
         }
       });
@@ -346,7 +305,7 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
             <div className="max-w-3xl">
               <p className="text-sm font-semibold uppercase tracking-[0.35em] text-green-700">Mapa Geográfico</p>
               <h1 className="mt-2 text-3xl font-semibold text-gray-900 sm:text-4xl">Sitios de muestreo sobre el territorio</h1>
-              <p className="mt-3 max-w-3xl text-base text-gray-600">Explora los sitios con coordenadas, filtra por proyecto o estado y abre cada punto para revisar su detalle completo sin salir de la vista.</p>
+              <p className="mt-3 max-w-3xl text-base text-gray-600">Explora los sitios con coordenadas, filtra por proyecto y abre cada punto para revisar su detalle completo sin salir de la vista.</p>
             </div>
 
             <div className="flex flex-wrap gap-3">
@@ -369,14 +328,14 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
 
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard label="Sitios" value={formatNumber(summaryValues.totalSites)} helper="Resultado del endpoint de mapa" />
-            <StatCard label="Activos" value={formatNumber(summaryValues.activeSites)} helper="Sitios con estado activo" />
             <StatCard label="Coordenadas" value={formatNumber(summaryValues.coordinateSites)} helper="Sitios listos para marcar" />
             <StatCard label="Mediciones" value={formatNumber(summaryValues.measurementCount)} helper="Acumulado en el conjunto filtrado" />
+            <StatCard label="Último evento" value={formatDateTime(summaryValues.lastEventDate)} helper="Fecha más reciente disponible" />
           </div>
 
           <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
             <div className="space-y-6">
-              <form onSubmit={handleSubmit} className="grid gap-4 rounded-3xl border border-gray-200 bg-gray-50 p-5 lg:grid-cols-[1.15fr_0.9fr_1.25fr_auto]">
+              <form onSubmit={handleSubmit} className="grid gap-4 rounded-3xl border border-gray-200 bg-gray-50 p-5 lg:grid-cols-[1.15fr_1.25fr_auto]">
                 <label className="block">
                   <span className="mb-2 block text-sm font-medium text-gray-700">Proyecto</span>
                   <select
@@ -388,22 +347,6 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
                     {projectOptions.map((option) => (
                       <option key={option.id ?? option.label} value={option.id ?? option.label}>
                         {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-gray-700">Estado</span>
-                  <select
-                    value={draftFilters.status}
-                    onChange={(event) => setDraftFilters((current) => ({ ...current, status: event.target.value }))}
-                    className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none transition focus:border-green-500"
-                  >
-                    <option value="">Todos los estados</option>
-                    {statusOptions.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
                       </option>
                     ))}
                   </select>
@@ -447,15 +390,6 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
                 <div className="overflow-hidden rounded-[1.5rem] border border-gray-200">
                   <LeafletMap sites={visibleSites} selectedSiteId={selectedSiteId} onSelectSite={setSelectedSiteId} />
                 </div>
-
-                <div className="mt-4 flex flex-wrap gap-3 text-xs text-gray-500">
-                  {Object.entries(STATUS_COLORS).slice(0, 4).map(([key, palette]) => (
-                    <span key={key} className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
-                      <span className={`h-2.5 w-2.5 rounded-full ${palette.dot}`} />
-                      {key}
-                    </span>
-                  ))}
-                </div>
               </div>
 
               <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -497,7 +431,6 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
                     <h3 className="mt-2 text-2xl font-semibold text-gray-900">{selectedSite?.site_code ?? "Selecciona un punto"}</h3>
                     <p className="mt-1 text-sm text-gray-500">{selectedSite?.project_name ?? "El panel lateral se llena desde el endpoint de detalle"}</p>
                   </div>
-                  <span className={`rounded-full border px-3 py-1 text-xs font-medium ${getStatusPalette(selectedSite?.status).border} ${getStatusPalette(selectedSite?.status).text}`}>{selectedSite?.status ?? "Sin estado"}</span>
                 </div>
 
                 {detailLoading ? <div className="mt-4 rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-500">Cargando detalle del sitio...</div> : null}
@@ -509,6 +442,7 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
                   <DetailRow label="Altitud" value={selectedSite?.altitude_m !== undefined && selectedSite?.altitude_m !== null ? `${selectedSite.altitude_m} m` : "—"} />
                   <DetailRow label="Mediciones" value={selectedSite ? formatNumber(selectedSite.measurement_count) : "—"} />
                   <DetailRow label="Última actualización" value={formatDateTime(selectedSite?.last_updated)} />
+                  <DetailRow label="Último evento" value={formatDateTime(selectedSite?.last_event_date ?? selectedSite?.last_updated)} />
                 </div>
 
                 {selectedSite?.description ? <p className="mt-4 rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-600">{selectedSite.description}</p> : null}
@@ -519,6 +453,26 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
                     <div className="mt-3 flex flex-wrap gap-2">
                       {selectedSite.variables.map((variable, index) => (
                         <span key={`${variable.id ?? variable.variable_code ?? index}`} className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-600">{(variable.name ?? variable.variable_code ?? `Variable ${index + 1}`) + (variable.unit ? ` · ${variable.unit}` : "")}</span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {selectedSite?.recent_measurements?.length ? (
+                  <div className="mt-5">
+                    <h4 className="text-sm font-semibold text-gray-900">Mediciones recientes</h4>
+                    <div className="mt-3 space-y-2">
+                      {selectedSite.recent_measurements.map((measurement) => (
+                        <div key={measurement.id} className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{measurement.variable_name ?? `Variable ${measurement.variable_id}`}</p>
+                              <p className="mt-1 text-xs text-gray-500">{formatDateTime(measurement.event_date)}</p>
+                            </div>
+                            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-gray-600 shadow-sm">{measurement.unit ?? "—"}</span>
+                          </div>
+                          <p className="mt-2 text-sm text-gray-700">{measurement.value === null || measurement.value === undefined ? "—" : String(measurement.value)}</p>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -536,14 +490,6 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
                 ) : null}
               </div>
 
-              <div className="rounded-[2rem] border border-gray-200 bg-white p-5 shadow-sm">
-                <p className="text-xs uppercase tracking-[0.3em] text-gray-400">Cobertura</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-                  <StatCard label="Sitios seleccionados" value={formatNumber(summaryValues.selectedSites)} helper="Marca los puntos resaltados en la API" />
-                  <StatCard label="Con coordenadas" value={formatNumber(summaryValues.coordinateSites)} helper="Sitios que se pintan en el mapa" />
-                  <StatCard label="Estado activo" value={formatNumber(summaryValues.activeSites)} helper="Útil para el panel superior" />
-                </div>
-              </div>
             </aside>
           </div>
         </div>

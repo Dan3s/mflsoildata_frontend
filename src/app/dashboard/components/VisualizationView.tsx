@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type {
   FilterOption,
+  Site,
   VariableRead,
   VisualizationBySiteResponse,
   VisualizationCorrelationResponse,
   VisualizationTimeSeriesResponse,
 } from "@/app/services";
-import { ApiError, visualizationService } from "@/app/services";
+import { ApiError, sitesService, visualizationService } from "@/app/services";
 import PlotlyFigure from "./PlotlyFigure";
 import type { PlotParams } from "react-plotly.js";
 
@@ -20,6 +21,7 @@ type VisualizationViewProps = {
 type TabKey = "serie" | "sitio" | "correlacion";
 
 type SeriesChartMode = "Líneas" | "Barras" | "Boxplot" | "Histograma";
+type SiteComparisonLimit = 10 | 20 | 50 | 0;
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "serie", label: "Serie Temporal" },
@@ -28,6 +30,12 @@ const tabs: Array<{ key: TabKey; label: string }> = [
 ];
 
 const seriesChartModes: SeriesChartMode[] = ["Líneas", "Barras", "Boxplot", "Histograma"];
+const siteComparisonLimits: Array<{ label: string; value: SiteComparisonLimit }> = [
+  { label: "10 sitios", value: 10 },
+  { label: "20 sitios", value: 20 },
+  { label: "50 sitios", value: 50 },
+  { label: "Todos", value: 0 },
+];
 
 const seriesPalette = ["#16a34a", "#2563eb", "#f97316", "#7c3aed", "#0891b2", "#ef4444"];
 
@@ -48,6 +56,15 @@ const isDateFormattingError = (message: string) =>
   /nonetype/i.test(message) || /strftime/i.test(message) || /date/i.test(message) || /null/i.test(message);
 
 const getFiniteNumbers = (values: number[]) => values.filter((value) => Number.isFinite(value));
+
+const formatSiteLabel = (site: Site) => {
+  const locationParts = [site.admin_3, site.admin_2, site.admin_1, site.country].filter(Boolean);
+  const locationLabel = locationParts.length ? locationParts.join(" · ") : null;
+  const altitudeLabel = site.altitude_m !== undefined && site.altitude_m !== null ? `${site.altitude_m} m` : null;
+  const suffix = [locationLabel, altitudeLabel].filter(Boolean).join(" · ");
+
+  return suffix ? `${site.site_code} · ${suffix}` : site.site_code;
+};
 
 const createPlotLayout = (overrides?: PlotParams["layout"]) : PlotParams["layout"] => ({
   autosize: true,
@@ -128,20 +145,40 @@ const createHistogramFigure = (data: VisualizationTimeSeriesResponse): Pick<Plot
   }),
 });
 
-const createSiteComparisonFigure = (data: VisualizationBySiteResponse): Pick<PlotParams, "data" | "layout"> => ({
-  data: data.series.map((series, seriesIndex) => ({
-    x: data.categories,
-    y: series.values,
-    type: "bar" as const,
-    name: series.name,
-    marker: { color: sitePalette[seriesIndex % sitePalette.length] },
-  }) as PlotParams["data"][number]),
-  layout: createPlotLayout({
-    barmode: "group",
-    xaxis: { title: { text: "Sitio" }, showgrid: false, tickangle: -30 },
-    yaxis: { title: { text: "Valor" }, showgrid: true, gridcolor: "#eef2f7" },
-  }),
-});
+const createSiteComparisonFigure = (
+  data: VisualizationBySiteResponse,
+  labelsByCategory: Map<string, string>,
+  limit: SiteComparisonLimit,
+): Pick<PlotParams, "data" | "layout"> => {
+  const rankedCategories = data.categories
+    .map((category, index) => ({
+      category,
+      index,
+      score: data.series.reduce((accumulator, series) => accumulator + Math.abs(series.values[index] ?? 0), 0),
+    }))
+    .sort((left, right) => right.score - left.score);
+
+  const selectedCategories = limit > 0 ? rankedCategories.slice(0, limit) : rankedCategories;
+  const selectedIndexes = selectedCategories.map((item) => item.index);
+  const labels = selectedCategories.map((item) => labelsByCategory.get(item.category) ?? item.category);
+
+  return {
+    data: data.series.map((series, seriesIndex) => ({
+      x: labels,
+      y: selectedIndexes.map((index) => series.values[index]),
+      type: "bar" as const,
+      name: series.name,
+      marker: { color: sitePalette[seriesIndex % sitePalette.length] },
+      hovertemplate: `%{x}<br>${series.name}: %{y:.3f}<extra></extra>`,
+    }) as PlotParams["data"][number]),
+    layout: createPlotLayout({
+      barmode: "group",
+      xaxis: { title: { text: "Sitio" }, showgrid: false, tickangle: -25, automargin: true },
+      yaxis: { title: { text: "Valor" }, showgrid: true, gridcolor: "#eef2f7" },
+      margin: { l: 48, r: 24, t: 24, b: 120 },
+    }),
+  };
+};
 
 const buildTrendline = (points: VisualizationCorrelationResponse["points"]) => {
   if (!points.length) {
@@ -172,7 +209,12 @@ const buildTrendline = (points: VisualizationCorrelationResponse["points"]) => {
   };
 };
 
-const createCorrelationFigure = (data: VisualizationCorrelationResponse, showTrendline: boolean): Pick<PlotParams, "data" | "layout"> => {
+const createCorrelationFigure = (
+  data: VisualizationCorrelationResponse,
+  showTrendline: boolean,
+  xTitle: string,
+  yTitle: string,
+): Pick<PlotParams, "data" | "layout"> => {
   const points = data.points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
   const trendline = showTrendline ? buildTrendline(points) : null;
 
@@ -204,8 +246,8 @@ const createCorrelationFigure = (data: VisualizationCorrelationResponse, showTre
     ],
     layout: createPlotLayout({
       hovermode: "closest",
-      xaxis: { title: { text: "Variable X" }, showgrid: true, gridcolor: "#eef2f7" },
-      yaxis: { title: { text: "Variable Y" }, showgrid: true, gridcolor: "#eef2f7" },
+      xaxis: { title: { text: xTitle }, showgrid: true, gridcolor: "#eef2f7" },
+      yaxis: { title: { text: yTitle }, showgrid: true, gridcolor: "#eef2f7" },
       annotations: trendline
         ? [
             {
@@ -238,6 +280,21 @@ function ChartShell({ title, subtitle, children }: { title: string; subtitle: st
   );
 }
 
+function VariableLegend({ primary, secondary }: { primary: string; secondary: string }) {
+  return (
+    <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-600">
+      <span className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
+        <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
+        {primary}
+      </span>
+      <span className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
+        <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
+        {secondary}
+      </span>
+    </div>
+  );
+}
+
 export default function VisualizationView({ projectOptions, variables }: VisualizationViewProps) {
   const [tab, setTab] = useState<TabKey>("serie");
   const [chartType, setChartType] = useState<SeriesChartMode>("Líneas");
@@ -247,10 +304,12 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
   const [timeSeries, setTimeSeries] = useState<VisualizationTimeSeriesResponse | null>(null);
   const [siteComparison, setSiteComparison] = useState<VisualizationBySiteResponse | null>(null);
   const [correlation, setCorrelation] = useState<VisualizationCorrelationResponse | null>(null);
+  const [siteMetadata, setSiteMetadata] = useState<Site[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [emptyReason, setEmptyReason] = useState<string | null>(null);
   const [showTrendline, setShowTrendline] = useState(true);
+  const [siteComparisonLimit, setSiteComparisonLimit] = useState<SiteComparisonLimit>(20);
 
   const variableChoices = useMemo(
     () => variables.map((variable) => ({ value: String(variable.id), label: formatVariableLabel(variable) })),
@@ -262,6 +321,34 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
       setProjectId(String(projectOptions[0].id));
     }
   }, [projectId, projectOptions]);
+
+  useEffect(() => {
+    const projectIdNumber = projectId ? toNumber(projectId) : undefined;
+
+    if (!projectIdNumber) {
+      setSiteMetadata([]);
+      return;
+    }
+
+    let active = true;
+
+    sitesService
+      .getByProject(projectIdNumber)
+      .then((sites) => {
+        if (active) {
+          setSiteMetadata(sites);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSiteMetadata([]);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [projectId]);
 
   useEffect(() => {
     if (!primaryVariableId && variableChoices[0]) {
@@ -295,6 +382,7 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
     const baseQuery = {
       project_id: projectIdNumber,
       variable_id: primaryIdNumber,
+      variable_ids: [primaryIdNumber, secondaryIdNumber].filter((value): value is number => typeof value === "number"),
       secondary_variable_id: secondaryIdNumber,
       variable_x_id: primaryIdNumber,
       variable_y_id: secondaryIdNumber,
@@ -368,6 +456,8 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
 
   const primaryVariableLabel = variableChoices.find((variable) => variable.value === primaryVariableId)?.label ?? "Variable principal";
   const secondaryVariableLabel = variableChoices.find((variable) => variable.value === secondaryVariableId)?.label ?? "Variable secundaria";
+  const siteLabelsByCode = useMemo(() => new Map(siteMetadata.map((site) => [site.site_code, formatSiteLabel(site)])), [siteMetadata]);
+  const siteComparisonCaption = siteComparisonLimit > 0 ? `Mostrando los top ${siteComparisonLimit} sitios con mayor valor agregado` : "Mostrando todos los sitios disponibles";
 
   const chartBody = useMemo(() => {
     if (loading) {
@@ -397,21 +487,24 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
               : createLineFigure(timeSeries);
 
       return (
-        <div className="h-[28rem]">
-          <PlotlyFigure
-            data={figure.data}
-            layout={figure.layout}
-            config={{ responsive: true, displayModeBar: true, displaylogo: false }}
-          />
+        <div>
+          <VariableLegend primary={primaryVariableLabel} secondary={secondaryVariableLabel} />
+          <div className="h-[28rem]">
+            <PlotlyFigure
+              data={figure.data}
+              layout={figure.layout}
+              config={{ responsive: true, displayModeBar: true, displaylogo: false }}
+            />
+          </div>
         </div>
       );
     }
 
     if (tab === "sitio" && siteComparison) {
-      const figure = createSiteComparisonFigure(siteComparison);
+      const figure = createSiteComparisonFigure(siteComparison, siteLabelsByCode, siteComparisonLimit);
 
       return (
-        <div className="h-[28rem]">
+        <div className="h-[30rem]">
           <PlotlyFigure
             data={figure.data}
             layout={figure.layout}
@@ -422,21 +515,24 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
     }
 
     if (tab === "correlacion" && correlation) {
-      const figure = createCorrelationFigure(correlation, showTrendline);
+      const figure = createCorrelationFigure(correlation, showTrendline, primaryVariableLabel, secondaryVariableLabel);
 
       return (
-        <div className="h-[28rem]">
-          <PlotlyFigure
-            data={figure.data}
-            layout={figure.layout}
-            config={{ responsive: true, displayModeBar: true, displaylogo: false }}
-          />
+        <div>
+          <VariableLegend primary={primaryVariableLabel} secondary={secondaryVariableLabel} />
+          <div className="h-[28rem]">
+            <PlotlyFigure
+              data={figure.data}
+              layout={figure.layout}
+              config={{ responsive: true, displayModeBar: true, displaylogo: false }}
+            />
+          </div>
         </div>
       );
     }
 
     return <div className="flex h-[24rem] items-center justify-center text-sm text-gray-500">No hay datos para mostrar con la configuración actual.</div>;
-  }, [chartType, correlation, emptyReason, error, loading, showTrendline, siteComparison, tab, timeSeries]);
+  }, [chartType, correlation, emptyReason, error, loading, showTrendline, siteComparison, siteComparisonLimit, siteLabelsByCode, tab, timeSeries]);
 
   const exportUrl = useMemo(() => {
     const projectIdNumber = projectId ? toNumber(projectId) : undefined;
@@ -446,6 +542,7 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
     return visualizationService.exportChart({
       project_id: projectIdNumber,
       variable_id: primaryIdNumber,
+      variable_ids: chartType ? [primaryIdNumber, secondaryIdNumber].filter((value): value is number => typeof value === "number") : undefined,
       secondary_variable_id: secondaryIdNumber,
       variable_x_id: primaryIdNumber,
       variable_y_id: secondaryIdNumber,
@@ -537,6 +634,23 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
               </select>
             </label>
 
+            {tab === "sitio" ? (
+              <label className="block">
+                <span className="mb-2 block text-sm text-gray-700">Sitios visibles</span>
+                <select
+                  value={siteComparisonLimit}
+                  onChange={(event) => setSiteComparisonLimit(Number(event.target.value) as SiteComparisonLimit)}
+                  className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white"
+                >
+                  {siteComparisonLimits.map((option) => (
+                    <option key={option.label} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
             {tab === "correlacion" ? (
               <label className="block">
                 <span className="mb-2 block text-sm text-gray-700">Tendencia</span>
@@ -550,6 +664,10 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
               </label>
             ) : null}
           </div>
+
+          <p className="mt-4 text-sm text-gray-500">
+            Los filtros de proyecto y variables afectan a todos los tabs. El selector de tipo de gráfica solo cambia la representación del tab de Serie Temporal.
+          </p>
         </section>
 
         <div className="flex w-fit flex-wrap gap-1 rounded-full border border-gray-200 bg-white p-1 shadow-sm">
@@ -567,7 +685,7 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
 
         <ChartShell
           title={tab === "serie" ? "Evolución Temporal de Variables" : tab === "sitio" ? "Comparación por Sitio de Muestreo" : "Correlación entre Variables"}
-          subtitle={tab === "serie" ? `Variación de ${primaryVariableLabel} y ${secondaryVariableLabel} a lo largo del tiempo` : tab === "sitio" ? "Comparación de valores entre diferentes sitios para las variables seleccionadas" : "Relación exploratoria entre variables seleccionadas"}
+          subtitle={tab === "serie" ? `Variación de ${primaryVariableLabel} y ${secondaryVariableLabel} a lo largo del tiempo` : tab === "sitio" ? `${siteComparisonCaption}. Se comparan ${primaryVariableLabel} y ${secondaryVariableLabel} por sitio.` : `Relación exploratoria entre ${primaryVariableLabel} y ${secondaryVariableLabel}`}
         >
           {chartBody}
         </ChartShell>

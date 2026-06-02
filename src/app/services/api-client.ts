@@ -1,4 +1,4 @@
-export type ApiQueryValue = string | number | boolean | null | undefined;
+export type ApiQueryValue = string | number | boolean | null | undefined | Array<string | number | boolean>;
 
 export type ApiQueryParams = Record<string, ApiQueryValue>;
 
@@ -34,6 +34,15 @@ const buildUrl = (path: string, query?: ApiQueryParams) => {
   if (query) {
     Object.entries(query).forEach(([key, value]) => {
       if (value === undefined || value === null || value === "") {
+        return;
+      }
+
+      if (Array.isArray(value)) {
+        value.forEach((item) => {
+          if (item !== undefined && item !== null && item !== "") {
+            url.searchParams.append(key, String(item));
+          }
+        });
         return;
       }
 

@@ -10,21 +10,11 @@ type LeafletMapProps = {
   onSelectSite: (siteId: number) => void;
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  activo: "#16a34a",
-  active: "#16a34a",
-  validado: "#0ea5e9",
-  pendiente: "#f59e0b",
-  inactivo: "#64748b",
-  inactive: "#64748b",
-};
-
-const DEFAULT_COLOR = "#7c3aed";
+const DEFAULT_COLOR = "#16a34a";
+const SELECTED_COLOR = "#0ea5e9";
 
 const isRenderableCoordinate = (site: MapSite) =>
   typeof site.latitude === "number" && Number.isFinite(site.latitude) && typeof site.longitude === "number" && Number.isFinite(site.longitude);
-
-const getColor = (status?: string | null) => STATUS_COLORS[status?.trim().toLowerCase() || ""] ?? DEFAULT_COLOR;
 
 const getBounds = (sites: MapSite[]) => {
   const coordinates = sites.filter(isRenderableCoordinate);
@@ -81,7 +71,6 @@ export default function LeafletMap({ sites, selectedSiteId, onSelectSite }: Leaf
       <FitBounds sites={coordinates} selectedSiteId={selectedSiteId} />
       {coordinates.map((site) => {
         const selected = site.id === selectedSiteId;
-        const color = getColor(site.status);
 
         return (
           <CircleMarker
@@ -91,7 +80,7 @@ export default function LeafletMap({ sites, selectedSiteId, onSelectSite }: Leaf
             pathOptions={{
               color: "#ffffff",
               weight: selected ? 3 : 2,
-              fillColor: color,
+              fillColor: selected ? SELECTED_COLOR : DEFAULT_COLOR,
               fillOpacity: selected ? 0.95 : 0.85,
             }}
             eventHandlers={{
@@ -103,9 +92,6 @@ export default function LeafletMap({ sites, selectedSiteId, onSelectSite }: Leaf
                 <p className="text-sm font-semibold text-gray-900">{site.site_code}</p>
                 <p className="mt-1 text-xs text-gray-500">{site.project_name ?? `Proyecto ${site.project_id}`}</p>
                 <div className="mt-2 space-y-1 text-xs text-gray-600">
-                  <p>
-                    <span className="font-medium">Estado:</span> {site.status ?? "Sin estado"}
-                  </p>
                   <p>
                     <span className="font-medium">Coordenadas:</span> {site.latitude}, {site.longitude}
                   </p>

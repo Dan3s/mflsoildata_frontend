@@ -159,6 +159,17 @@ export interface DashboardRecord {
   status: string;
 }
 
+export interface DashboardRecordDetailMeasurement {
+  id: number;
+  measurement_code?: string | null;
+  variable_id: number;
+  variable_name?: string | null;
+  value: string | number | boolean | null;
+  unit?: string | null;
+  event_date?: string | null;
+  status?: string | null;
+}
+
 export interface DashboardRecordsResponse {
   items: DashboardRecord[];
   total: number;
@@ -189,6 +200,7 @@ export interface VisualizationQuery {
   project_id?: number;
   site_id?: number;
   variable_id?: number;
+  variable_ids?: number[];
   secondary_variable_id?: number;
   variable_x_id?: number;
   variable_y_id?: number;
@@ -232,13 +244,12 @@ export interface VisualizationCorrelationResponse {
 
 export interface MapSummary {
   total_sites?: number;
-  active_sites?: number;
-  inactive_sites?: number;
   selected_sites?: number;
   sites_with_coordinates?: number;
   sites_without_coordinates?: number;
   measurement_count?: number;
   last_updated?: string | null;
+  last_event_date?: string | null;
 }
 
 export interface MapSite {
@@ -248,11 +259,10 @@ export interface MapSite {
   project_name?: string | null;
   latitude?: number | null;
   longitude?: number | null;
-  status?: string | null;
   measurement_count?: number | null;
   last_updated?: string | null;
+  last_event_date?: string | null;
   is_selected?: boolean | null;
-  is_active?: boolean | null;
   country?: string | null;
   admin_1?: string | null;
   admin_2?: string | null;
@@ -264,6 +274,15 @@ export interface MapSiteDetail extends MapSite {
   description?: string | null;
   attributes?: Record<string, string | number | boolean | null> | null;
   metadata?: Record<string, string | number | boolean | null> | null;
+  recent_variables?: Array<{
+    id?: number;
+    name?: string | null;
+    variable_code?: string | null;
+    unit?: string | null;
+    value?: string | number | boolean | null;
+    event_date?: string | null;
+  }> | null;
+  recent_measurements?: DashboardRecordDetailMeasurement[] | null;
   variables?: Array<{
     id?: number;
     name?: string | null;
@@ -282,7 +301,6 @@ export interface MapSitesResponse {
 
 export interface MapFilters {
   project_id?: number;
-  status?: string;
   search?: string;
   bbox?: string;
   north?: number;
