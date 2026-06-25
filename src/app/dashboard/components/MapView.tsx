@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { mapService, type FilterOption, type MapSite, type MapSiteDetail, type MapSummary } from "@/app/services";
 
@@ -116,6 +117,7 @@ function SiteListItem({
 }
 
 export default function MapView({ projectOptions, initialSites, initialSummary }: MapViewProps) {
+  const router = useRouter();
   const [draftFilters, setDraftFilters] = useState<MapDraftFilters>({ projectId: "", search: "" });
   const [activeFilters, setActiveFilters] = useState<MapDraftFilters>({ projectId: "", search: "" });
   const [sites, setSites] = useState<MapSite[]>(initialSites);
@@ -233,6 +235,24 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
   const handleOpenExport = () => {
     const url = mapService.exportSites(toQuery(activeFilters));
     window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const handleViewInCharts = () => {
+    if (!selectedSite) {
+      return;
+    }
+    const params = new URLSearchParams({
+      project_id: String(selectedSite.project_id),
+      site_id: String(selectedSite.id),
+      site_code: selectedSite.site_code,
+    });
+    // Preselect a variable the site actually has data for, so the chart lands on
+    // real data instead of the (likely empty) default variable.
+    const seedVariableId = selectedSite.recent_measurements?.find((m) => m.variable_id)?.variable_id ?? selectedSite.recent_variables?.find((v) => v.id)?.id;
+    if (seedVariableId) {
+      params.set("variable_id", String(seedVariableId));
+    }
+    router.push(`/dashboard/visualizacion?${params.toString()}`);
   };
 
   const detailExtras = useMemo(() => {
@@ -424,16 +444,32 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
             </div>
 
             <aside className="space-y-6">
-              <div className="rounded-[2rem] border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="rounded-[2rem] border border-amber-200 bg-amber-50/50 p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-green-700">Detalle del sitio</p>
+                    <p className="text-xs uppercase tracking-[0.3em] text-amber-700">Detalle del sitio</p>
                     <h3 className="mt-2 text-2xl font-semibold text-gray-900">{selectedSite?.site_code ?? "Selecciona un punto"}</h3>
                     <p className="mt-1 text-sm text-gray-500">{selectedSite?.project_name ?? "El panel lateral se llena desde el endpoint de detalle"}</p>
                   </div>
                 </div>
 
-                {detailLoading ? <div className="mt-4 rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-500">Cargando detalle del sitio...</div> : null}
+                {selectedSite ? (
+                  <button
+                    type="button"
+                    onClick={handleViewInCharts}
+                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-amber-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-amber-700"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                      <path d="M4 19h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      <path d="M7 16V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      <path d="M12 16V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      <path d="M17 16v-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                    Ver en gráficas
+                  </button>
+                ) : null}
+
+                {detailLoading ? <div className="mt-4 rounded-2xl bg-white/70 px-4 py-3 text-sm text-gray-500">Cargando detalle del sitio...</div> : null}
 
                 <div className="mt-5 grid gap-3">
                   <DetailRow label="Proyecto" value={selectedSite?.project_name ?? (selectedSite ? `Proyecto ${selectedSite.project_id}` : "—")} />
@@ -459,17 +495,17 @@ export default function MapView({ projectOptions, initialSites, initialSummary }
                 ) : null}
 
                 {selectedSite?.recent_measurements?.length ? (
-                  <div className="mt-5">
-                    <h4 className="text-sm font-semibold text-gray-900">Mediciones recientes</h4>
+                  <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <h4 className="text-sm font-semibold text-amber-800">Mediciones recientes</h4>
                     <div className="mt-3 space-y-2">
                       {selectedSite.recent_measurements.map((measurement) => (
-                        <div key={measurement.id} className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
+                        <div key={measurement.id} className="rounded-2xl border border-amber-100 bg-white px-4 py-3">
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="text-sm font-medium text-gray-900">{measurement.variable_name ?? `Variable ${measurement.variable_id}`}</p>
                               <p className="mt-1 text-xs text-gray-500">{formatDateTime(measurement.event_date)}</p>
                             </div>
-                            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-gray-600 shadow-sm">{measurement.unit ?? "—"}</span>
+                            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 shadow-sm">{measurement.unit ?? "—"}</span>
                           </div>
                           <p className="mt-2 text-sm text-gray-700">{measurement.value === null || measurement.value === undefined ? "—" : String(measurement.value)}</p>
                         </div>

@@ -16,6 +16,10 @@ import type { PlotParams } from "react-plotly.js";
 type VisualizationViewProps = {
   projectOptions: FilterOption[];
   variables: VariableRead[];
+  initialProjectId?: string;
+  initialSiteId?: string;
+  initialSiteCode?: string;
+  initialVariableId?: string;
 };
 
 type TabKey = "serie" | "sitio" | "correlacion";
@@ -42,7 +46,8 @@ const seriesPalette = ["#16a34a", "#2563eb", "#f97316", "#7c3aed", "#0891b2", "#
 const sitePalette = ["#2563eb", "#16a34a", "#f97316", "#7c3aed", "#0891b2", "#ef4444"];
 
 const formatVariableLabel = (variable: VariableRead) => {
-  const baseLabel = variable.name?.trim() || variable.variable_code?.trim() || `Variable ${variable.id}`;
+  const baseLabel =
+    variable.name?.trim() || variable.label?.trim() || variable.variable_code?.trim() || `Variable ${variable.id}`;
   return variable.matrix ? `${baseLabel} (${variable.matrix})` : baseLabel;
 };
 
@@ -295,11 +300,24 @@ function VariableLegend({ primary, secondary }: { primary: string; secondary: st
   );
 }
 
-export default function VisualizationView({ projectOptions, variables }: VisualizationViewProps) {
+export default function VisualizationView({
+  projectOptions,
+  variables,
+  initialProjectId,
+  initialSiteId,
+  initialSiteCode,
+  initialVariableId,
+}: VisualizationViewProps) {
   const [tab, setTab] = useState<TabKey>("serie");
   const [chartType, setChartType] = useState<SeriesChartMode>("Líneas");
-  const [projectId, setProjectId] = useState<string>(projectOptions[0]?.id ? String(projectOptions[0].id) : "");
-  const [primaryVariableId, setPrimaryVariableId] = useState<string>(variables[0]?.id ? String(variables[0].id) : "");
+  const [projectId, setProjectId] = useState<string>(
+    initialProjectId || (projectOptions[0]?.id ? String(projectOptions[0].id) : ""),
+  );
+  const [siteId, setSiteId] = useState<string>(initialSiteId ?? "");
+  const [siteOptions, setSiteOptions] = useState<FilterOption[]>([]);
+  const [primaryVariableId, setPrimaryVariableId] = useState<string>(
+    initialVariableId || (variables[0]?.id ? String(variables[0].id) : ""),
+  );
   const [secondaryVariableId, setSecondaryVariableId] = useState<string>(variables[1]?.id ? String(variables[1].id) : variables[0]?.id ? String(variables[0].id) : "");
   const [timeSeries, setTimeSeries] = useState<VisualizationTimeSeriesResponse | null>(null);
   const [siteComparison, setSiteComparison] = useState<VisualizationBySiteResponse | null>(null);
@@ -310,6 +328,12 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
   const [emptyReason, setEmptyReason] = useState<string | null>(null);
   const [showTrendline, setShowTrendline] = useState(true);
   const [siteComparisonLimit, setSiteComparisonLimit] = useState<SiteComparisonLimit>(20);
+
+  // A specific site filters the time-series and correlation charts ("site mode").
+  // "Comparación por Sitio" compares across sites, so it is disabled while a site
+  // is selected.
+  const selectedSiteLabel =
+    siteOptions.find((option) => String(option.id) === siteId)?.label ?? initialSiteCode ?? siteId;
 
   const variableChoices = useMemo(
     () => variables.map((variable) => ({ value: String(variable.id), label: formatVariableLabel(variable) })),
@@ -360,10 +384,50 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
     }
   }, [primaryVariableId, secondaryVariableId, variableChoices]);
 
+  // Site catalog for the "Sitio" selector (uncapped). Drops the active site if it
+  // no longer belongs to the selected project.
+  useEffect(() => {
+    const projectIdNumber = projectId ? toNumber(projectId) : undefined;
+
+    if (!projectIdNumber) {
+      setSiteOptions([]);
+      return;
+    }
+
+    let active = true;
+
+    sitesService
+      .getOptions(projectIdNumber)
+      .then((options) => {
+        if (!active) {
+          return;
+        }
+        setSiteOptions(options);
+        setSiteId((current) => (current && options.some((option) => String(option.id) === current) ? current : ""));
+      })
+      .catch(() => {
+        if (active) {
+          setSiteOptions([]);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [projectId]);
+
+  // "Comparación por Sitio" is meaningless for a single site → leave that tab.
+  useEffect(() => {
+    if (siteId && tab === "sitio") {
+      setTab("serie");
+    }
+  }, [siteId, tab]);
+
   useEffect(() => {
     const projectIdNumber = projectId ? toNumber(projectId) : undefined;
     const primaryIdNumber = primaryVariableId ? toNumber(primaryVariableId) : undefined;
     const secondaryIdNumber = secondaryVariableId ? toNumber(secondaryVariableId) : undefined;
+    const siteIdNumber = siteId ? toNumber(siteId) : undefined;
 
     if (!projectIdNumber || !primaryIdNumber) {
       setTimeSeries(null);
@@ -381,6 +445,9 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
 
     const baseQuery = {
       project_id: projectIdNumber,
+      // Only the time-series and correlation charts are filtered by site; the
+      // by-site comparison is disabled while a site is selected.
+      site_id: tab === "sitio" ? undefined : siteIdNumber,
       variable_id: primaryIdNumber,
       variable_ids: [primaryIdNumber, secondaryIdNumber].filter((value): value is number => typeof value === "number"),
       secondary_variable_id: secondaryIdNumber,
@@ -410,7 +477,11 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
             setSiteComparison(null);
             setCorrelation(null);
             setError(null);
-            setEmptyReason("No hay fechas válidas o valores suficientes para construir la serie temporal.");
+            setEmptyReason(
+              siteId
+                ? "El sitio seleccionado no tiene datos para esta variable. Prueba con otra variable o usa 'Ver todos los sitios'."
+                : "No hay fechas válidas o valores suficientes para construir la serie temporal.",
+            );
             return;
           }
 
@@ -452,7 +523,7 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
     return () => {
       active = false;
     };
-  }, [primaryVariableId, projectId, secondaryVariableId, tab]);
+  }, [primaryVariableId, projectId, secondaryVariableId, siteId, tab]);
 
   const primaryVariableLabel = variableChoices.find((variable) => variable.value === primaryVariableId)?.label ?? "Variable principal";
   const secondaryVariableLabel = variableChoices.find((variable) => variable.value === secondaryVariableId)?.label ?? "Variable secundaria";
@@ -473,7 +544,13 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
     }
 
     if (tab === "serie" && timeSeries && !isUsableSeries(timeSeries)) {
-      return <div className="flex h-[24rem] items-center justify-center text-center text-sm text-amber-600">No hay fechas válidas o valores suficientes para construir la serie temporal.</div>;
+      return (
+        <div className="flex h-[24rem] items-center justify-center text-center text-sm text-amber-600">
+          {siteId
+            ? "El sitio seleccionado no tiene datos para esta variable. Prueba con otra variable o usa 'Ver todos los sitios'."
+            : "No hay fechas válidas o valores suficientes para construir la serie temporal."}
+        </div>
+      );
     }
 
     if (tab === "serie" && timeSeries) {
@@ -532,23 +609,29 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
     }
 
     return <div className="flex h-[24rem] items-center justify-center text-sm text-gray-500">No hay datos para mostrar con la configuración actual.</div>;
-  }, [chartType, correlation, emptyReason, error, loading, showTrendline, siteComparison, siteComparisonLimit, siteLabelsByCode, tab, timeSeries]);
+  }, [chartType, correlation, emptyReason, error, loading, showTrendline, siteComparison, siteComparisonLimit, siteId, siteLabelsByCode, tab, timeSeries]);
 
   const exportUrl = useMemo(() => {
     const projectIdNumber = projectId ? toNumber(projectId) : undefined;
     const primaryIdNumber = primaryVariableId ? toNumber(primaryVariableId) : undefined;
     const secondaryIdNumber = secondaryVariableId ? toNumber(secondaryVariableId) : undefined;
+    const siteIdNumber = siteId ? toNumber(siteId) : undefined;
+
+    // The export endpoint keys off the active tab (timeseries|by-site|correlation),
+    // not the series render style (Líneas/Barras/…).
+    const exportChartType = tab === "serie" ? "timeseries" : tab === "sitio" ? "by-site" : "correlation";
 
     return visualizationService.exportChart({
       project_id: projectIdNumber,
+      site_id: tab === "sitio" ? undefined : siteIdNumber,
       variable_id: primaryIdNumber,
-      variable_ids: chartType ? [primaryIdNumber, secondaryIdNumber].filter((value): value is number => typeof value === "number") : undefined,
+      variable_ids: [primaryIdNumber, secondaryIdNumber].filter((value): value is number => typeof value === "number"),
       secondary_variable_id: secondaryIdNumber,
       variable_x_id: primaryIdNumber,
       variable_y_id: secondaryIdNumber,
-      chart_type: chartType,
+      chart_type: exportChartType,
     });
-  }, [chartType, primaryVariableId, projectId, secondaryVariableId]);
+  }, [primaryVariableId, projectId, secondaryVariableId, siteId, tab]);
 
   return (
     <div className="px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
@@ -573,6 +656,32 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
           </button>
         </div>
 
+        {siteId ? (
+          <div className="flex flex-col gap-3 rounded-3xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path d="M12 21s-6-5.2-6-10a6 6 0 1 1 12 0c0 4.8-6 10-6 10Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                  <circle cx="12" cy="11" r="2" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-amber-800">Modo por sitio</p>
+                <p className="text-sm text-amber-700">
+                  Mostrando datos del sitio <span className="font-medium">{selectedSiteLabel}</span>. La comparación por sitio está deshabilitada.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSiteId("")}
+              className="inline-flex w-fit items-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-700 shadow-sm transition hover:bg-amber-100"
+            >
+              Ver todos los sitios
+            </button>
+          </div>
+        ) : null}
+
         <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex items-start gap-3">
             <div className="mt-1 text-gray-500">
@@ -592,9 +701,32 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
           <div className="mt-6 grid gap-4 lg:grid-cols-4">
             <label className="block">
               <span className="mb-2 block text-sm text-gray-700">Proyecto</span>
-              <select value={projectId} onChange={(event) => setProjectId(event.target.value)} className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white">
+              <select
+                value={projectId}
+                onChange={(event) => {
+                  setProjectId(event.target.value);
+                  setSiteId("");
+                }}
+                className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white"
+              >
                 {projectOptions.map((option) => (
                   <option key={option.id ?? option.label} value={String(option.id ?? option.label)}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm text-gray-700">Sitio</span>
+              <select
+                value={siteId}
+                onChange={(event) => setSiteId(event.target.value)}
+                className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white"
+              >
+                <option value="">Todos los sitios</option>
+                {siteOptions.map((option) => (
+                  <option key={option.id ?? option.label} value={String(option.id ?? "")}>
                     {option.label}
                   </option>
                 ))}
@@ -623,16 +755,18 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
               </select>
             </label>
 
-            <label className="block">
-              <span className="mb-2 block text-sm text-gray-700">Tipo de Gráfica</span>
-              <select value={chartType} onChange={(event) => setChartType(event.target.value as SeriesChartMode)} className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white">
-                {seriesChartModes.map((mode) => (
-                  <option key={mode} value={mode}>
-                    {mode}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {tab === "serie" ? (
+              <label className="block">
+                <span className="mb-2 block text-sm text-gray-700">Tipo de Gráfica</span>
+                <select value={chartType} onChange={(event) => setChartType(event.target.value as SeriesChartMode)} className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white">
+                  {seriesChartModes.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {mode}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
             {tab === "sitio" ? (
               <label className="block">
@@ -671,16 +805,23 @@ export default function VisualizationView({ projectOptions, variables }: Visuali
         </section>
 
         <div className="flex w-fit flex-wrap gap-1 rounded-full border border-gray-200 bg-white p-1 shadow-sm">
-          {tabs.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setTab(item.key)}
-              className={`rounded-full px-4 py-2 text-sm transition ${tab === item.key ? "bg-gray-100 text-gray-900 shadow-sm" : "text-gray-600 hover:bg-gray-50"}`}
-            >
-              {item.label}
-            </button>
-          ))}
+          {tabs.map((item) => {
+            const disabled = item.key === "sitio" && Boolean(siteId);
+            return (
+              <button
+                key={item.key}
+                type="button"
+                disabled={disabled}
+                title={disabled ? "Selecciona 'Todos los sitios' para comparar entre sitios" : undefined}
+                onClick={() => setTab(item.key)}
+                className={`rounded-full px-4 py-2 text-sm transition ${
+                  tab === item.key ? "bg-gray-100 text-gray-900 shadow-sm" : "text-gray-600 hover:bg-gray-50"
+                } ${disabled ? "cursor-not-allowed opacity-40 hover:bg-transparent" : ""}`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </div>
 
         <ChartShell

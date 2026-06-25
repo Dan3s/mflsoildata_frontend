@@ -125,6 +125,18 @@ export interface MeasurementFilters {
 export interface VariableRead {
   id: number;
   variable_code: string;
+  /** Some catalog endpoints (e.g. GET /variables) return the display name as `label`. */
+  name?: string | null;
+  label?: string | null;
+  domain: string;
+  value_type: string;
+  matrix?: string | null;
+  default_unit_id?: number | null;
+  description?: string | null;
+}
+
+export interface VariableCreate {
+  variable_code: string;
   name: string;
   domain: string;
   value_type: string;
@@ -309,5 +321,126 @@ export interface MapFilters {
   west?: number;
   skip?: number;
   limit?: number;
+}
+
+// ── Upload (carga de datos) ─────────────────────────────────────────────────
+
+export type FileFormat = "xlsx" | "csv";
+
+export type TemplateValueType = "numeric" | "text" | "boolean" | "date";
+
+/**
+ * Una columna candidata para la plantilla de carga.
+ * `id` es el identificador estable que el front envía al backend al generar la
+ * plantilla. Para mediciones usa el prefijo `var:<variable_id>`, para atributos
+ * EAV usa `attr:<ATTRIBUTE_CODE>`, y para campos estructurales un código plano.
+ */
+export interface TemplateColumn {
+  id: string;
+  label: string;
+  required: boolean;
+  value_type: TemplateValueType;
+  /** Tabla/campo destino en la BD (informativo, p.ej. "measurements", "sites.geom"). */
+  db_target?: string | null;
+  unit?: string | null;
+  matrix?: string | null;
+  variable_id?: number | null;
+  variable_code?: string | null;
+  attribute_code?: string | null;
+  description?: string | null;
+  example?: string | null;
+}
+
+export interface TemplateColumnGroup {
+  key: string;
+  label: string;
+  description?: string | null;
+  columns: TemplateColumn[];
+}
+
+export interface TemplateColumnsResponse {
+  groups: TemplateColumnGroup[];
+}
+
+export interface TemplateQuery {
+  columns: string[];
+  format?: FileFormat;
+  include_examples?: boolean;
+  project_id?: number;
+}
+
+export type UploadIssueSeverity = "error" | "warning";
+
+export interface UploadIssue {
+  row: number;
+  column: string;
+  value: string | null;
+  message: string;
+  severity: UploadIssueSeverity;
+  code?: string | null;
+}
+
+/** Conteos de las entidades que se crearían/afectarían al importar. */
+export interface UploadAffectedCounts {
+  projects?: number;
+  sites?: number;
+  sampling_events?: number;
+  samples?: number;
+  measurements?: number;
+  new_variables?: number;
+}
+
+export interface UploadValidationResponse {
+  upload_id: string;
+  filename: string;
+  total_rows: number;
+  valid_rows: number;
+  error_count: number;
+  warning_count: number;
+  summary: UploadAffectedCounts;
+  issues: UploadIssue[];
+}
+
+export interface UploadImportRequest {
+  upload_id: string;
+  /** Si true, los warnings no bloquean la importación. */
+  ignore_warnings?: boolean;
+}
+
+export interface UploadImportResponse {
+  status: "completed" | "partial" | "failed";
+  inserted: UploadAffectedCounts;
+  skipped_rows: number;
+  message?: string | null;
+}
+
+// ── Download (descarga de datos) ────────────────────────────────────────────
+
+export interface DownloadFilters {
+  project_ids?: number[];
+  site_ids?: number[];
+  variable_ids?: number[];
+  date_from?: string;
+  date_to?: string;
+  matrix?: string;
+}
+
+export interface DownloadEstimateResponse {
+  record_count: number;
+  sample_count?: number;
+  site_count?: number;
+}
+
+export interface DownloadExportQuery extends DownloadFilters {
+  format?: FileFormat;
+  include_metadata?: boolean;
+}
+
+export interface RecentDownload {
+  id?: number | string;
+  filename: string;
+  created_at: string;
+  format?: FileFormat;
+  record_count?: number | null;
 }
 

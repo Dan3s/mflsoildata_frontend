@@ -53,6 +53,55 @@ const buildUrl = (path: string, query?: ApiQueryParams) => {
   return url.toString();
 };
 
+// ── Server-to-server auth (SSR) ─────────────────────────────────────────────
+// Browser calls go through the Next proxy (/api/backend), which injects the
+// signed-in user's bearer token. Server-side calls (SSR in page.tsx) hit the API
+// directly, so they authenticate with a cached Keycloak service-account token
+// (client_credentials). This file is shared with client components, so we only
+// use fetch + env here — never a server-only import.
+let cachedServiceToken: { value: string; expiresAt: number } | null = null;
+
+async function getServiceToken(): Promise<string | null> {
+  if (typeof window !== "undefined") {
+    return null;
+  }
+
+  const issuer = process.env.AUTH_KEYCLOAK_ISSUER;
+  const clientId = process.env.AUTH_KEYCLOAK_ID;
+  const clientSecret = process.env.AUTH_KEYCLOAK_SECRET;
+  if (!issuer || !clientId || !clientSecret) {
+    return null;
+  }
+
+  if (cachedServiceToken && Date.now() < cachedServiceToken.expiresAt - 30_000) {
+    return cachedServiceToken.value;
+  }
+
+  try {
+    const response = await fetch(`${issuer}/protocol/openid-connect/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const data = (await response.json()) as { access_token: string; expires_in?: number };
+    cachedServiceToken = {
+      value: data.access_token,
+      expiresAt: Date.now() + (data.expires_in ?? 60) * 1000,
+    };
+    return cachedServiceToken.value;
+  } catch {
+    return null;
+  }
+}
+
 const parseResponse = async <T>(response: Response): Promise<T> => {
   const contentType = response.headers.get("content-type") ?? "";
 
@@ -64,11 +113,18 @@ const parseResponse = async <T>(response: Response): Promise<T> => {
 };
 
 async function request<T>(path: string, init?: RequestInit, query?: ApiQueryParams): Promise<T> {
+  // On the server, attach the service-account bearer (the browser path is
+  // authenticated by the Next proxy instead).
+  const serviceToken = await getServiceToken();
+
+  // Only set a JSON Content-Type for string bodies. For FormData we must let the
+  // browser set "multipart/form-data" together with its boundary.
   const response = await fetch(buildUrl(path, query), {
     ...init,
     headers: {
       Accept: "application/json",
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...(serviceToken ? { Authorization: `Bearer ${serviceToken}` } : {}),
+      ...(typeof init?.body === "string" ? { "Content-Type": "application/json" } : {}),
       ...(init?.headers ?? {}),
     },
     cache: "no-store",
@@ -101,6 +157,8 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  postForm: <T>(path: string, form: FormData, query?: ApiQueryParams) =>
+    request<T>(path, { method: "POST", body: form }, query),
   put: <T, B = unknown>(path: string, body: B) =>
     request<T>(path, {
       method: "PUT",

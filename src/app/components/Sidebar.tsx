@@ -2,11 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { canUpload } from "@/app/lib/roles";
+import Logo from "@/app/components/Logo";
 
 type SidebarItem = {
   href: string;
   label: string;
   icon: React.ReactNode;
+  /** When true, only editors/admins see this item. */
+  requiresUpload?: boolean;
+};
+
+type SidebarProps = {
+  roles: string[];
+  userName: string;
+  primaryRole: string;
+  logoutAction: () => Promise<void>;
 };
 
 const sidebarItems: SidebarItem[] = [
@@ -48,6 +59,7 @@ const sidebarItems: SidebarItem[] = [
   {
     href: "/dashboard/cargar",
     label: "Cargar Datos",
+    requiresUpload: true,
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
         <path d="M12 16V4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -80,18 +92,16 @@ const sidebarItems: SidebarItem[] = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ roles, userName, primaryRole, logoutAction }: SidebarProps) {
   const pathname = usePathname();
+  const allowUpload = canUpload(roles);
+  const visibleItems = sidebarItems.filter((item) => !item.requiresUpload || allowUpload);
 
   return (
     <aside className="flex h-full w-full flex-col border-r border-gray-200 bg-white">
       <div className="border-b border-gray-200 px-5 py-4">
         <Link href="/dashboard" className="flex items-center gap-3">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-green-600 text-white shadow-sm">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M4 12c6-8 16-6 16-6s2 12-12 14C6 18 4 12 4 12Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
+          <Logo className="h-9 w-9" />
           <span className="flex flex-col leading-tight">
             <span className="text-sm font-semibold text-gray-900">MFL Platform</span>
             <span className="text-[10px] text-gray-500">Multifunctional Landscapes</span>
@@ -99,9 +109,14 @@ export default function Sidebar() {
         </Link>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 py-4 text-sm">
-        {sidebarItems.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4 text-sm">
+        {visibleItems.map((item) => {
+          // "/dashboard" is the index route, so it must match exactly; otherwise it
+          // would stay highlighted on every sub-route (e.g. /dashboard/descargar).
+          const isIndex = item.href === "/dashboard";
+          const active = isIndex
+            ? pathname === item.href
+            : pathname === item.href || pathname.startsWith(`${item.href}/`);
 
           return (
             <Link
@@ -121,12 +136,27 @@ export default function Sidebar() {
       <div className="border-t border-gray-200 p-4">
         <div className="rounded-2xl bg-gray-50 p-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-green-100 text-green-700 font-semibold">U</div>
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-green-100 text-green-700 font-semibold">
+              {userName.charAt(0).toUpperCase()}
+            </div>
             <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-gray-900">Usuario Demo</div>
-              <div className="inline-flex rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">Admin</div>
+              <div className="truncate text-sm font-medium text-gray-900">{userName}</div>
+              <div className="inline-flex rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">{primaryRole}</div>
             </div>
           </div>
+          <form action={logoutAction} className="mt-3">
+            <button
+              type="submit"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M15 12H3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M9 8l-4 4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Cerrar sesión
+            </button>
+          </form>
         </div>
       </div>
     </aside>

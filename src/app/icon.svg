@@ -1,0 +1,17 @@
+<svg viewBox="16 0 108 116" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MFL Platform">
+  <polygon points="28,29 70,50 70,106 28,85" fill="#14532d" />
+  <g transform="matrix(42,21,0,56,28,29)">
+    <rect x="0.24" y="0.50" width="0.14" height="0.30" fill="#86efac" />
+    <rect x="0.43" y="0.38" width="0.14" height="0.42" fill="#dcfce7" />
+    <rect x="0.62" y="0.26" width="0.14" height="0.54" fill="#86efac" />
+  </g>
+  <polygon points="70,50 112,29 112,40 70,61" fill="#5a3c1f" />
+  <polygon points="70,61 112,40 112,55 70,76" fill="#7c5128" />
+  <polygon points="70,76 112,55 112,70 70,91" fill="#9c6b34" />
+  <polygon points="70,91 112,70 112,85 70,106" fill="#c39a5c" />
+  <polygon points="70,8 112,29 70,50 28,29" fill="#16a34a" />
+  <path d="M70 31 L70 17" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" fill="none" />
+  <path d="M70 24 C64 18, 56 18, 54 22 C58 27, 66 28, 70 24 Z" fill="#ffffff" />
+  <path d="M70 24 C76 18, 84 18, 86 22 C82 27, 74 28, 70 24 Z" fill="#ffffff" />
+  <path d="M70 8 L112 29 L70 50 L28 29 Z M70 50 L70 106 M28 29 L28 85 L70 106 L112 85 L112 29" fill="none" stroke="#ffffff" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" />
+</svg>

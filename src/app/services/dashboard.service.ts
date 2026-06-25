@@ -39,13 +39,8 @@ export const dashboardService = {
   getMatrices: () => apiClient.get<FilterOption[]>("matrices"),
   getVariables: (filters?: { matrix?: string; domain?: string; value_type?: string; search?: string }) =>
     apiClient.get<VariableRead[]>("variables", filters),
-  getVariableOptions: (filters?: { matrix?: string; domain?: string; value_type?: string; search?: string }) =>
-    apiClient.get<VariableRead[]>("variables", filters).then((variables) =>
-      variables.map((variable) => ({
-        id: variable.id,
-        label: variable.name,
-      })),
-    ),
+  getVariableOptions: (filters?: { project_id?: number; matrix?: string; domain?: string; value_type?: string; search?: string }) =>
+    apiClient.get<FilterOption[]>("variables/options", filters),
   getMeasurementStatuses: () => apiClient.get<FilterOption[]>("measurement-statuses"),
   getLaboratories: () => apiClient.get<FilterOption[]>("laboratories"),
 };
