@@ -9,4 +9,10 @@ const compat = new FlatCompat({
   baseDirectory: __dirname,
 });
 
-export default [...compat.extends("next/core-web-vitals", "next/typescript")];
+const config = [
+  // Build output and generated files are not ours to lint.
+  { ignores: [".next/**", "node_modules/**", "coverage/**", "scripts/**", "next-env.d.ts"] },
+  ...compat.extends("next/core-web-vitals", "next/typescript"),
+];
+
+export default config;

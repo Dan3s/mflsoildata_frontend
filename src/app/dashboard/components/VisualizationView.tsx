@@ -78,7 +78,11 @@ const formatSiteLabel = (site: Site) => {
   return suffix ? `${site.site_code} · ${suffix}` : site.site_code;
 };
 
-const createPlotLayout = (overrides?: PlotParams["layout"]) : PlotParams["layout"] => ({
+// `barmode` is a valid Plotly layout key that the Layout type in the installed plotly.js typings
+// no longer declares, so it is allowed here explicitly.
+type LayoutOverrides = PlotParams["layout"] & { barmode?: "group" | "stack" | "overlay" | "relative" };
+
+const createPlotLayout = (overrides?: LayoutOverrides): PlotParams["layout"] => ({
   autosize: true,
   margin: { l: 48, r: 24, t: 24, b: 48 },
   paper_bgcolor: "rgba(0,0,0,0)",

@@ -1,6 +1,8 @@
 export type ApiQueryValue = string | number | boolean | null | undefined | Array<string | number | boolean>;
 
-export type ApiQueryParams = Record<string, ApiQueryValue>;
+// Any plain object of filters: interfaces (the services' filter types) do not satisfy an index
+// signature, so `Record<string, ApiQueryValue>` rejected every one of them.
+export type ApiQueryParams = object;
 
 export class ApiError extends Error {
   status: number;
