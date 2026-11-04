@@ -11,6 +11,7 @@ import type {
   SoilProfile,
 } from "@/app/services";
 import { ApiError, dashboardService, eavService, sitesService, variablesService } from "@/app/services";
+import { normalizeCode } from "@/app/lib/normalizeCode";
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -22,14 +23,6 @@ const cardCls = "rounded-2xl border border-gray-200 bg-white p-5 shadow-sm";
 const VALUE_TYPE_KEYS = ["numeric", "text", "boolean", "date"] as const;
 
 const CATEGORY_SUGGESTIONS = ["topografia", "clima", "vegetacion", "admin", "riesgo", "teledeteccion", "sampling", "horizon", "lab_meta"];
-
-const normalizeCode = (value: string) =>
-  value
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
 
 const buildValuePayload = (valueType: string, raw: string, bool: boolean): AttributeValuePayload => {
   if (valueType === "boolean") return { value_boolean: bool };
