@@ -243,6 +243,45 @@ mflsoildata_frontend/
 - Server-side (SSR) reads authenticate with a Keycloak **service-account** token
   (`client_credentials`) — this requires *Service accounts roles* enabled on the client.
 
+## Tests and checks
+
+```bash
+cd src
+npm run lint        # ESLint
+npm run typecheck   # tsc --noEmit
+npm test            # Vitest + Testing Library (unit and component tests)
+npm run build       # production build (also type-checks)
+```
+
+Tests sit next to the code they cover (`*.test.ts` / `*.test.tsx`). Besides the logic (filters
+cookie, year ranges, column-mapping suggestions, the explorer's date handling, the API client), one
+test checks that the Spanish and English messages have the same keys, placeholders and tags.
+
+## Branching and CI/CD
+
+```
+develop ──push──▶ tests          (fast feedback while working)
+develop ──PR────▶ stage ──▶ tests on the PR
+stage   ──merge─▶ tests again ──green──▶ merged into main ──▶ release
+```
+
+- Work and commit on **`develop`**; every push is tested.
+- Open a **pull request from `develop` to `stage`**; it cannot be merged until the checks pass.
+- When the PR is merged, the checks run again on `stage`. If they pass, GitHub Actions merges that
+  exact commit into **`main`** and publishes a **release** with the next patch version (`vX.Y.Z`).
+  Nobody pushes to `main` by hand.
+
+The workflow is `.github/workflows/ci.yml`.
+
+**One-time repository setup**
+
+1. Create the `stage` branch from `develop` and push it (`main` already exists).
+2. *Settings → Actions → General → Workflow permissions*: choose **Read and write permissions**
+   (needed to merge into `main` and create releases).
+3. *Settings → Branches*: protect `stage` and require the **test** check before merging.
+4. If `main` is protected too, create a token that is allowed to push to it and save it as the
+   repository secret **`PROMOTE_TOKEN`** (otherwise the default `GITHUB_TOKEN` is used).
+
 ## Deployment
 
 Build a production bundle and serve it behind a reverse proxy (e.g. Nginx):
