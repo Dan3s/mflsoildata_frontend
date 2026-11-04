@@ -131,6 +131,18 @@ async function request<T>(path: string, init?: RequestInit, query?: ApiQueryPara
   });
 
   if (!response.ok) {
+    // Expired/invalid session: send the user to re-authenticate instead of
+    // surfacing a raw "Signature has expired" error. With Keycloak SSO this is
+    // usually seamless. (Server-side calls keep throwing for the page to handle.)
+    if (
+      response.status === 401 &&
+      typeof window !== "undefined" &&
+      !window.location.pathname.startsWith("/login")
+    ) {
+      const callbackUrl = window.location.pathname + window.location.search;
+      window.location.href = `/login?expired=1&callbackUrl=${encodeURIComponent(callbackUrl)}`;
+    }
+
     let payload: unknown = null;
 
     try {
@@ -139,9 +151,14 @@ async function request<T>(path: string, init?: RequestInit, query?: ApiQueryPara
       payload = null;
     }
 
-    const message =
-      typeof payload === "object" && payload !== null && "detail" in payload
-        ? String((payload as { detail?: unknown }).detail)
+    // FastAPI's own 422 validation errors shape `detail` as an array of
+    // {loc, msg, type} objects rather than a string — String(array) would
+    // otherwise stringify to "[object Object]".
+    const detail = typeof payload === "object" && payload !== null ? (payload as { detail?: unknown }).detail : undefined;
+    const message = Array.isArray(detail)
+      ? detail.map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : String(d))).join("; ")
+      : detail !== undefined
+        ? String(detail)
         : `API request failed with status ${response.status}`;
 
     throw new ApiError(message, response.status, payload);

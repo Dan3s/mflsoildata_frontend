@@ -1,5 +1,5 @@
 import { apiClient } from "./api-client";
-import type { MapFilters, MapSiteDetail, MapSitesResponse, MapSummary } from "./api-types";
+import type { FilterOption, MapFacets, MapFilters, MapRegions, MapSiteDetail, MapSitesResponse, MapSummary } from "./api-types";
 
 type MapSitesPayload = MapSitesResponse | MapSiteDetail[] | { items?: MapSiteDetail[]; total?: number; skip?: number; limit?: number };
 type MapSitePayload = MapSiteDetail | { item?: MapSiteDetail; site?: MapSiteDetail };
@@ -34,4 +34,11 @@ export const mapService = {
   getSites: async (filters?: MapFilters) => normalizeSitesResponse(await apiClient.get<MapSitesPayload>("map/sites", filters)),
   getSiteById: async (siteId: number) => normalizeSiteDetail(await apiClient.get<MapSitePayload>(`map/sites/${siteId}`)),
   exportSites: (filters?: MapFilters) => apiClient.buildUrl("map/export", filters),
+  /** Distinct admin_1 (departments) and admin_2 (municipalities) for the filters. */
+  getRegions: (params?: { country?: string; admin_1?: string }) =>
+    apiClient.get<MapRegions>("map/regions", params),
+  /** Options each selector can offer, given the values of the others (cascading filters). */
+  getFacets: (filters?: MapFilters) => apiClient.get<MapFacets>("map/facets", filters),
+  /** Variables actually measured within the current scope (for the color picker). */
+  getVariables: (filters?: MapFilters) => apiClient.get<FilterOption[]>("map/variables", filters),
 };

@@ -37,7 +37,16 @@ async function proxyRequest(request: NextRequest, params: { path: string[] }) {
   });
 
   const responseHeaders = new Headers(response.headers);
-  responseHeaders.delete("content-encoding");
+  // `fetch` transparently decodes a compressed body, so any header describing the
+  // *encoded* form no longer matches what we are about to forward. `content-length`
+  // is the dangerous one: it counts the gzipped bytes, and a browser that trusts it
+  // stops reading a multi-MB payload after a few hundred KB, cutting the JSON mid
+  // object. Only drop it when the response actually was encoded, so plain responses
+  // (file downloads) keep their length and their progress bar.
+  if (responseHeaders.has("content-encoding")) {
+    responseHeaders.delete("content-encoding");
+    responseHeaders.delete("content-length");
+  }
   responseHeaders.delete("transfer-encoding");
 
   return new NextResponse(response.body, {
