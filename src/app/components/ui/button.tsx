@@ -20,7 +20,7 @@ interface UIButtonLinkProps
     Omit<ComponentProps<typeof Link>, "className" | "children"> {}
 
 const baseClasses =
-  "inline-flex items-center justify-center gap-2 rounded-xl border font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#bc6c25]/40 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center justify-center gap-2 rounded-xl border font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-brand-400/40 disabled:cursor-not-allowed disabled:opacity-50";
 
 const sizeClasses: Record<UIButtonSize, string> = {
   sm: "px-3 py-1.5 text-sm",
@@ -28,10 +28,11 @@ const sizeClasses: Record<UIButtonSize, string> = {
   lg: "px-6 py-3 text-base",
 };
 
+// Secondary matches the gray-outline style already used everywhere else in the
+// app (UploadView, MapView, DatasetCatalogue, ...) rather than a one-off color.
 const variantClasses: Record<UIButtonVariant, string> = {
-  primary: "border-green-600 bg-green-600 text-white hover:bg-green-700",
-  secondary:
-    "border-[#bc6c25] bg-white text-[#bc6c25] hover:bg-[#fcf6ee]",
+  primary: "border-brand-700 bg-brand-700 text-white hover:bg-brand-800",
+  secondary: "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
 };
 
 export function UIButton({

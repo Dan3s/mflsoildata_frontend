@@ -4,12 +4,15 @@
 @source "../app/**/*.{js,ts,jsx,tsx,mdx}";
 
 :root {
-  --background: #f7fbf6;
-  --foreground: #0f1c0f;
+  /* Sampled from the logos: deep green + mint, over a warm soil ramp. */
+  --background: #f2f7f3;
+  --foreground: #0d2019;
   --surface: #ffffff;
-  --surface-muted: #efe8d8;
-  --accent: #bc6c25;
-  --accent-strong: #283618;
+  --surface-muted: #e7f0e9;
+  --brand-deep: #033529;
+  --brand-mint: #63c392;
+  --accent: #9c6b34;
+  --accent-strong: #033529;
 }
 
 @theme inline {
@@ -22,14 +25,19 @@ body {
   background: var(--background);
   color: var(--foreground);
   min-height: 100%;
+  /* `clip`, not just `hidden`: `hidden` turns html/body into scroll containers and silently
+     breaks every `position: sticky` below them (the sticky footers). `hidden` stays as the fallback. */
   overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
   font-family: var(--font-montserrat), system-ui, sans-serif;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 }
