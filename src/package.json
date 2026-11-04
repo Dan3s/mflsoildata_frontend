@@ -6,19 +6,26 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "glossary:docx": "node scripts/build-glossary-docx.mjs"
   },
   "dependencies": {
+    "@emotion/is-prop-valid": "^1.4.0",
+    "@kanaries/graphic-walker": "^0.5.2",
     "@types/react-plotly.js": "^2.6.4",
+    "driver.js": "^1.10.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.17.0",
     "next": "^15.3.1",
     "next-auth": "^5.0.0-beta.31",
+    "next-intl": "^4.13.4",
     "plotly.js-dist-min": "^3.5.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-leaflet": "^5.0.0",
-    "react-plotly.js": "^2.6.0"
+    "react-plotly.js": "^2.6.0",
+    "styled-components": "^6.4.3",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
@@ -26,6 +33,7 @@
     "@types/node": "^22.15.29",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
+    "docx": "^9.7.1",
     "eslint": "^9.27.0",
     "eslint-config-next": "^15.3.1",
     "postcss": "^8.5.3",
