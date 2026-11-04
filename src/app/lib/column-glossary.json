@@ -1,0 +1,392 @@
+{
+  "title": "Glosario de columnas — Base de datos MFL Soil Platform",
+  "intro": [
+    "Este glosario describe el significado de cada columna de la base de datos de la plataforma MFL. Sirve como referencia al preparar y cargar plantillas de datos, y como documento vivo para acordar definiciones con el equipo.",
+    "El modelo es escalable: los datos que varían por proyecto/país no se agregan como columnas nuevas, sino como atributos dinámicos (patrón EAV) en las tablas *_attributes (diccionario) y *_attribute_values (valores).",
+    "En las tablas de valores EAV y en measurements, solo se llena UNA de las columnas value_numeric / value_text / value_boolean / value_date, según el tipo del atributo o variable.",
+    "Las columnas marcadas como «Automático» las gestiona el sistema y no se incluyen en las plantillas de carga."
+  ],
+  "generic": {
+    "id": "Identificador interno único del registro (clave primaria autogenerada).",
+    "notes": "Metadatos y trazabilidad en formato JSON (archivo y columna de origen, transformaciones aplicadas, valor original, etc.).",
+    "created_at": "Fecha y hora de creación del registro (automática).",
+    "updated_at": "Fecha y hora de la última modificación del registro (automática).",
+    "value_numeric": "Valor numérico del dato (solo si el tipo es numérico).",
+    "value_text": "Valor de texto del dato (solo si el tipo es texto).",
+    "value_boolean": "Valor booleano/Sí-No del dato (solo si el tipo es booleano).",
+    "value_date": "Valor de fecha del dato (solo si el tipo es fecha).",
+    "unit_id": "Unidad de medida usada (referencia a units); si queda vacía se asume la unidad por defecto.",
+    "effective_date": "Fecha efectiva a la que corresponde el valor (p. ej. año de la capa o de la medición); puede quedar vacía si es estático.",
+    "source_name": "Nombre de la fuente del dato (para auditoría).",
+    "source_ref": "Referencia específica de la fuente (enlace, ficha, página, etc.).",
+    "confidence": "Nivel de confianza del valor, en escala 0 a 1.",
+    "default_unit_id": "Unidad de medida por defecto (referencia a units).",
+    "value_type": "Tipo de dato del valor: numeric (número), text (texto), boolean (Sí/No) o date (fecha).",
+    "category": "Categoría del atributo (p. ej. topografía, clima, vegetación, horizonte, lab_meta)."
+  },
+  "modules": [
+    { "key": "core", "label": "Núcleo — Proyectos y Sitios" },
+    { "key": "muestreo_lab", "label": "Muestreo y Laboratorio" },
+    { "key": "catalogos", "label": "Catálogos" },
+    { "key": "perfiles", "label": "Perfiles de suelo" },
+    { "key": "eav", "label": "Atributos dinámicos (EAV)" }
+  ],
+  "tables": [
+    {
+      "table": "projects",
+      "module": "core",
+      "label": "projects — Proyectos",
+      "description": "Entidad de agrupación. Un proyecto agrupa sitios, eventos de muestreo y perfiles.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "code", "type": "Texto", "required": true, "description": "Código único y estable del proyecto (normalizado: mayúsculas, sin tildes). Ej.: CLIMALOCA_ECUADOR." },
+        { "name": "name", "type": "Texto", "required": true, "description": "Nombre legible del proyecto." },
+        { "name": "country", "type": "Texto", "description": "País principal del proyecto." },
+        { "name": "donor", "type": "Texto", "description": "Donante o financiador del proyecto." },
+        { "name": "description", "type": "Texto largo", "description": "Descripción libre del proyecto." },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "sites",
+      "module": "core",
+      "label": "sites — Sitios de muestreo",
+      "description": "Ubicación georreferenciada (PostGIS) donde se realizan muestreos y observaciones.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "project_id", "type": "Entero (ID)", "required": true, "description": "Proyecto al que pertenece el sitio (referencia a projects)." },
+        { "name": "site_code", "type": "Texto", "required": true, "description": "Código del sitio, único dentro del proyecto (identificador externo, p. ej. ID Clima-LoCa o código IGAC)." },
+        { "name": "country", "type": "Texto", "description": "País del sitio." },
+        { "name": "admin_1", "type": "Texto", "description": "División administrativa nivel 1 (p. ej. departamento/provincia)." },
+        { "name": "admin_2", "type": "Texto", "description": "División administrativa nivel 2 (p. ej. municipio)." },
+        { "name": "admin_3", "type": "Texto", "description": "División administrativa nivel 3 (p. ej. vereda/corregimiento)." },
+        { "name": "altitude_m", "type": "Número", "description": "Altitud del sitio en metros sobre el nivel del mar." },
+        { "name": "geom", "type": "Geometría (PostGIS)", "required": true, "description": "Geometría del sitio (normalmente un punto) en coordenadas WGS84 (SRID 4326). En la plantilla se ingresa como latitud y longitud." },
+        { "name": "location_notes", "type": "JSON", "description": "Datos de ubicación sin columna fija, en JSON (p. ej. «Registro No.»)." },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "site_characteristics",
+      "module": "core",
+      "label": "site_characteristics — Características del sitio",
+      "description": "Bloques JSON semi-estructurados con descriptores del sitio cuando no se justifica un atributo EAV.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "site_id", "type": "Entero (ID)", "required": true, "description": "Sitio descrito (referencia a sites)." },
+        { "name": "profile_info", "type": "JSON", "description": "Información de perfil del sitio (semi-estructurada)." },
+        { "name": "site_info", "type": "JSON", "description": "Información general del sitio." },
+        { "name": "sampling_info", "type": "JSON", "description": "Información de muestreo del sitio." },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "sampling_events",
+      "module": "muestreo_lab",
+      "label": "sampling_events — Eventos de muestreo",
+      "description": "Visita, campaña o actividad realizada en un sitio y proyecto, en una fecha determinada.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "project_id", "type": "Entero (ID)", "required": true, "description": "Proyecto del evento (referencia a projects)." },
+        { "name": "site_id", "type": "Entero (ID)", "required": true, "description": "Sitio del evento (referencia a sites)." },
+        { "name": "event_type", "type": "Texto", "description": "Tipo de evento o campaña." },
+        { "name": "activity", "type": "Texto", "description": "Actividad realizada (p. ej. «Actividad (Clima-LoCa)»)." },
+        { "name": "event_date", "type": "Fecha", "description": "Fecha del muestreo o visita." },
+        { "name": "organization", "type": "Texto", "description": "Organización responsable del evento." },
+        { "name": "responsible", "type": "Texto", "description": "Persona responsable del evento." },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "samples",
+      "module": "muestreo_lab",
+      "label": "samples — Muestras",
+      "description": "Unidad física o conceptual de observación. Incluye muestras de suelo/hoja/grano y también perfiles y horizontes (como muestras).",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "event_id", "type": "Entero (ID)", "description": "Evento de muestreo asociado (referencia a sampling_events). Opcional pero recomendado." },
+        { "name": "site_id", "type": "Entero (ID)", "description": "Sitio asociado (referencia a sites). Opcional." },
+        { "name": "sample_type_id", "type": "Entero (ID)", "required": true, "description": "Tipo de muestra (referencia a sample_types)." },
+        { "name": "sample_code", "type": "Texto", "required": true, "description": "Identificador externo de la muestra (p. ej. «ID Muestra original»). Único por evento." },
+        { "name": "parent_sample_id", "type": "Entero (ID)", "description": "Muestra «padre» para jerarquías (perfil → horizonte, o muestras derivadas)." },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "sample_type_notes",
+      "module": "muestreo_lab",
+      "label": "sample_type_notes — Notas de muestra",
+      "description": "Notas o metadatos adicionales por muestra, guardados tal cual en JSON (auditoría).",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "sample_id", "type": "Entero (ID)", "required": true, "description": "Muestra a la que se asocian las notas (referencia a samples)." },
+        { "name": "notes", "type": "JSON", "required": true, "description": "Bloque JSON con notas/metadatos de la muestra." },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "lab_batches",
+      "module": "muestreo_lab",
+      "label": "lab_batches — Lotes de laboratorio",
+      "description": "Corrida o paquete de análisis de una muestra en un laboratorio (referencias e ids de envío).",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "sample_id", "type": "Entero (ID)", "required": true, "description": "Muestra analizada (referencia a samples)." },
+        { "name": "lab_id", "type": "Entero (ID)", "required": true, "description": "Laboratorio que procesa la muestra (referencia a labs)." },
+        { "name": "method_id", "type": "Entero (ID)", "description": "Método analítico usado (referencia a methods)." },
+        { "name": "lab_batch_code", "type": "Texto", "description": "Código del lote o corrida de laboratorio." },
+        { "name": "lab_reference", "type": "Texto", "description": "Referencia de laboratorio (Ref. Lab.)." },
+        { "name": "lab_sample_id", "type": "Texto", "description": "Id de la muestra dentro del laboratorio (Id Lab.)." },
+        { "name": "lab_shipment_id", "type": "Texto", "description": "Id de envío al laboratorio (Id Envío Lab.)." },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "measurements",
+      "module": "muestreo_lab",
+      "label": "measurements — Mediciones",
+      "description": "Resultado analítico (numérico, texto, booleano o fecha) de una variable para una muestra.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "measurement_code", "type": "Texto", "description": "Código externo de la medición (opcional)." },
+        { "name": "sample_id", "type": "Entero (ID)", "required": true, "description": "Muestra medida (referencia a samples)." },
+        { "name": "variable_id", "type": "Entero (ID)", "required": true, "description": "Variable o analito medido (referencia a variables)." },
+        { "name": "lab_batch_id", "type": "Entero (ID)", "description": "Lote de laboratorio de origen (referencia a lab_batches)." },
+        { "name": "unit_id", "type": "Entero (ID)", "description": "Unidad del valor (referencia a units); si queda vacía se asume la unidad por defecto de la variable." },
+        { "name": "value_numeric", "type": "Número" },
+        { "name": "value_text", "type": "Texto largo" },
+        { "name": "value_boolean", "type": "Sí/No" },
+        { "name": "value_date", "type": "Fecha" },
+        { "name": "qualifier_result", "type": "Texto", "description": "Calificador del resultado (p. ej. <, >, ND, ESTIMATED)." },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "sample_types",
+      "module": "catalogos",
+      "label": "sample_types — Tipos de muestra",
+      "description": "Catálogo de tipos de muestra. Valores base: SOIL, LEAF, GRAIN, SOIL_PROFILE, SOIL_HORIZON.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "sample_type_code", "type": "Texto", "required": true, "description": "Código del tipo de muestra (p. ej. SOIL, LEAF, GRAIN)." },
+        { "name": "name", "type": "Texto", "required": true, "description": "Nombre legible del tipo de muestra." },
+        { "name": "notes", "type": "JSON" }
+      ]
+    },
+    {
+      "table": "labs",
+      "module": "catalogos",
+      "label": "labs — Laboratorios",
+      "description": "Catálogo de laboratorios que procesan las muestras.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "lab_code", "type": "Texto", "required": true, "description": "Código del laboratorio (p. ej. LOCAL, CENTRAL, KUL)." },
+        { "name": "name", "type": "Texto", "required": true, "description": "Nombre del laboratorio." },
+        { "name": "scope", "type": "Texto", "description": "Alcance del laboratorio (local, central, etc.)." },
+        { "name": "organization", "type": "Texto", "description": "Organización a la que pertenece el laboratorio." },
+        { "name": "country", "type": "Texto", "description": "País del laboratorio." },
+        { "name": "notes", "type": "JSON" }
+      ]
+    },
+    {
+      "table": "methods",
+      "module": "catalogos",
+      "label": "methods — Métodos analíticos",
+      "description": "Catálogo de métodos y extractantes de laboratorio (el «cómo» se mide).",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "method_code", "type": "Texto", "required": true, "description": "Código del método (p. ej. MEHLICH, HCL, ACETATO, TOTAL)." },
+        { "name": "name", "type": "Texto", "required": true, "description": "Nombre del método analítico." },
+        { "name": "extractant", "type": "Texto", "description": "Extractante o reactivo usado por el método." },
+        { "name": "description", "type": "Texto largo", "description": "Descripción del método." },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "units",
+      "module": "catalogos",
+      "label": "units — Unidades",
+      "description": "Catálogo de unidades de medida.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "unit_code", "type": "Texto", "required": true, "description": "Código de la unidad (p. ej. MG_KG, PCT, CMOL_KG)." },
+        { "name": "symbol", "type": "Texto", "required": true, "description": "Símbolo de la unidad (p. ej. mg/kg, %, cmol/kg)." },
+        { "name": "dimension", "type": "Texto", "description": "Dimensión física de la unidad (masa, concentración, longitud, etc.)." },
+        { "name": "notes", "type": "JSON" }
+      ]
+    },
+    {
+      "table": "variables",
+      "module": "catalogos",
+      "label": "variables — Variables / analitos",
+      "description": "Catálogo de «qué se mide». Cada variable define su tipo de dato, matriz y unidad por defecto.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "variable_code", "type": "Texto", "required": true, "description": "Código único y estable del analito o propiedad (p. ej. PH_H2O, SOC)." },
+        { "name": "name", "type": "Texto", "required": true, "description": "Nombre legible de la variable." },
+        { "name": "domain", "type": "Texto", "required": true, "description": "Dominio de la variable (p. ej. fertility, physical, climate, plant_nutrition)." },
+        { "name": "matrix", "type": "Texto", "description": "Matriz a la que aplica: SOIL, LEAF, GRAIN, etc." },
+        { "name": "value_type", "type": "Texto", "required": true },
+        { "name": "default_unit_id", "type": "Entero (ID)" },
+        { "name": "description", "type": "Texto largo", "description": "Descripción de la variable." },
+        { "name": "notes", "type": "JSON" }
+      ]
+    },
+    {
+      "table": "soil_profiles",
+      "module": "perfiles",
+      "label": "soil_profiles — Perfiles de suelo",
+      "description": "Entidad «perfil» como documento (p. ej. fichas IGAC), con identidad propia independiente de las muestras.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "project_id", "type": "Entero (ID)", "required": true, "description": "Proyecto del perfil (referencia a projects)." },
+        { "name": "site_id", "type": "Entero (ID)", "description": "Sitio asociado al perfil (referencia a sites). Opcional." },
+        { "name": "event_id", "type": "Entero (ID)", "description": "Evento asociado al perfil (referencia a sampling_events). Opcional." },
+        { "name": "profile_code", "type": "Texto", "required": true, "description": "Código del perfil, único por proyecto (p. ej. cod_perfil IGAC)." },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "site_attributes",
+      "module": "eav",
+      "label": "site_attributes — Diccionario de atributos de sitio",
+      "description": "Catálogo de atributos geográficos dinámicos del sitio (clima, topografía, riesgo, etc.). Define qué atributos pueden registrarse.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "site_attribute_code", "type": "Texto", "required": true, "description": "Código único del atributo (normalizado)." },
+        { "name": "name", "type": "Texto", "required": true, "description": "Nombre legible del atributo." },
+        { "name": "description", "type": "Texto largo", "description": "Descripción del atributo." },
+        { "name": "value_type", "type": "Texto", "required": true },
+        { "name": "default_unit_id", "type": "Entero (ID)" },
+        { "name": "category", "type": "Texto" },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "site_attribute_values",
+      "module": "eav",
+      "label": "site_attribute_values — Valores de atributos de sitio",
+      "description": "Valor de un atributo geográfico para un sitio, con trazabilidad y fecha efectiva.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "site_id", "type": "Entero (ID)", "required": true, "description": "Sitio al que corresponde el valor (referencia a sites)." },
+        { "name": "site_attribute_id", "type": "Entero (ID)", "required": true, "description": "Atributo cuyo valor se registra (referencia a site_attributes)." },
+        { "name": "unit_id", "type": "Entero (ID)" },
+        { "name": "value_numeric", "type": "Número" },
+        { "name": "value_text", "type": "Texto largo" },
+        { "name": "value_boolean", "type": "Sí/No" },
+        { "name": "value_date", "type": "Fecha" },
+        { "name": "effective_date", "type": "Fecha" },
+        { "name": "source_name", "type": "Texto" },
+        { "name": "source_ref", "type": "Texto" },
+        { "name": "confidence", "type": "Número" },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "sample_attributes",
+      "module": "eav",
+      "label": "sample_attributes — Diccionario de atributos de muestra",
+      "description": "Catálogo de atributos dinámicos de las muestras (p. ej. profundidad, código de horizonte, método de muestreo).",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "sample_attribute_code", "type": "Texto", "required": true, "description": "Código único del atributo (normalizado; p. ej. DEPTH_FROM_CM, HORIZON_CODE)." },
+        { "name": "name", "type": "Texto", "required": true, "description": "Nombre legible del atributo." },
+        { "name": "description", "type": "Texto largo", "description": "Descripción del atributo." },
+        { "name": "value_type", "type": "Texto", "required": true },
+        { "name": "default_unit_id", "type": "Entero (ID)" },
+        { "name": "category", "type": "Texto" },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "sample_attribute_values",
+      "module": "eav",
+      "label": "sample_attribute_values — Valores de atributos de muestra",
+      "description": "Valor de un atributo dinámico para una muestra, con trazabilidad.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "sample_id", "type": "Entero (ID)", "required": true, "description": "Muestra a la que corresponde el valor (referencia a samples)." },
+        { "name": "sample_attribute_id", "type": "Entero (ID)", "required": true, "description": "Atributo cuyo valor se registra (referencia a sample_attributes)." },
+        { "name": "unit_id", "type": "Entero (ID)" },
+        { "name": "value_numeric", "type": "Número" },
+        { "name": "value_text", "type": "Texto largo" },
+        { "name": "value_boolean", "type": "Sí/No" },
+        { "name": "value_date", "type": "Fecha" },
+        { "name": "effective_date", "type": "Fecha" },
+        { "name": "source_name", "type": "Texto" },
+        { "name": "source_ref", "type": "Texto" },
+        { "name": "confidence", "type": "Número" },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "soil_profile_attributes",
+      "module": "eav",
+      "label": "soil_profile_attributes — Diccionario de atributos de perfil",
+      "description": "Catálogo de atributos dinámicos de los perfiles de suelo (fuente, edafólogo, escala, plancha, etc.).",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "soil_profile_attribute_code", "type": "Texto", "required": true, "description": "Código único del atributo (normalizado; p. ej. SOURCE, OBSERVER, MAP_SCALE)." },
+        { "name": "name", "type": "Texto", "required": true, "description": "Nombre legible del atributo." },
+        { "name": "description", "type": "Texto largo", "description": "Descripción del atributo." },
+        { "name": "value_type", "type": "Texto", "required": true },
+        { "name": "default_unit_id", "type": "Entero (ID)" },
+        { "name": "category", "type": "Texto" },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    },
+    {
+      "table": "soil_profile_attribute_values",
+      "module": "eav",
+      "label": "soil_profile_attribute_values — Valores de atributos de perfil",
+      "description": "Valor de un atributo dinámico para un perfil de suelo, con trazabilidad.",
+      "columns": [
+        { "name": "id", "type": "Entero (ID)", "auto": true },
+        { "name": "soil_profile_id", "type": "Entero (ID)", "required": true, "description": "Perfil al que corresponde el valor (referencia a soil_profiles)." },
+        { "name": "soil_profile_attribute_id", "type": "Entero (ID)", "required": true, "description": "Atributo cuyo valor se registra (referencia a soil_profile_attributes)." },
+        { "name": "unit_id", "type": "Entero (ID)" },
+        { "name": "value_numeric", "type": "Número" },
+        { "name": "value_text", "type": "Texto largo" },
+        { "name": "value_boolean", "type": "Sí/No" },
+        { "name": "value_date", "type": "Fecha" },
+        { "name": "effective_date", "type": "Fecha" },
+        { "name": "source_name", "type": "Texto" },
+        { "name": "source_ref", "type": "Texto" },
+        { "name": "confidence", "type": "Número" },
+        { "name": "notes", "type": "JSON" },
+        { "name": "created_at", "type": "Fecha/hora", "auto": true },
+        { "name": "updated_at", "type": "Fecha/hora", "auto": true }
+      ]
+    }
+  ]
+}
