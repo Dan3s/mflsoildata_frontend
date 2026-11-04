@@ -78,7 +78,6 @@ NEXT_PUBLIC_API_URL=http://localhost:8000/
 
 # Auth.js / Keycloak
 AUTH_SECRET=generate-with-npx-auth-secret
-AUTH_URL=http://localhost:3000
 AUTH_KEYCLOAK_ID=mfl-frontend
 AUTH_KEYCLOAK_SECRET=your-keycloak-client-secret
 AUTH_KEYCLOAK_ISSUER=http://localhost:8080/realms/mfl
@@ -86,7 +85,8 @@ AUTH_KEYCLOAK_ISSUER=http://localhost:8080/realms/mfl
 
 Generate a secret with `npx auth secret` (or `openssl rand -base64 32`). The Keycloak client
 secret comes from the client's **Credentials** tab (visible only when *Client authentication*
-is ON).
+is ON). No `AUTH_URL` is needed — `trustHost` (see `auth.ts`) infers it from each request's
+`Host` header.
 
 > Note: `.env` must be in `src/`, not the repository root — Next.js reads it from the project root.
 
@@ -140,6 +140,23 @@ email verification and password reset screens. Configure the realm as follows:
 
 Role changes are managed from the platform's own **Users** screen (admin-only, backed by the
 API's `/users` endpoints) or directly from the Keycloak Admin Console (Users → Role mapping).
+
+### LAN usability testing (coworkers on the same network)
+
+A visiting browser can already reach the app at `http://<your-ip>:3000` with no change, but the
+Keycloak login redirect still goes to whatever host Keycloak's realm `mfl` → **Frontend URL**
+(Realm settings → General) is set to — `localhost` by default, which only resolves on *your*
+machine, not the visiting user's.
+
+1. Realm settings → General → **Frontend URL** → `http://<your-ip>:8080` (plain field, no restart).
+2. Set `AUTH_KEYCLOAK_LOCALTESTS=<your-ip>` in this app's `.env` and the mirrored
+   `KEYCLOAK_LOCALTESTS=<your-ip>` in `mflsoildata_api`'s `.env` (restart both dev servers) — this
+   swaps that host into `AUTH_KEYCLOAK_ISSUER`/`KEYCLOAK_ISSUER` without touching those variables.
+3. One-time, in client `mfl-frontend` (Settings): add `http://172.22.*.*:3000/*` (your subnet) to
+   *Valid Redirect URIs* alongside the `localhost` one, and `+` to *Web Origins*.
+
+Leave `AUTH_KEYCLOAK_LOCALTESTS` / `KEYCLOAK_LOCALTESTS` empty the rest of the time — everything
+behaves exactly as before.
 
 ### Custom Keycloak login theme
 
