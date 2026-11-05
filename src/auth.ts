@@ -23,9 +23,34 @@ function rolesFromAccessToken(accessToken?: string): string[] {
   }
 }
 
+/**
+ * LAN usability testing (e.g. a coworker hitting this machine's IP instead of
+ * localhost): Keycloak's own "Frontend URL" has to point at that same IP for
+ * its part of the OIDC flow to be reachable from their browser, which means
+ * every token's `iss` claim — and the authorization/token/logout endpoints we
+ * call — say that IP too, not localhost, even though Keycloak runs on this
+ * same machine. Set AUTH_KEYCLOAK_LOCALTESTS to that IP (optionally
+ * "ip:port") to swap it into AUTH_KEYCLOAK_ISSUER's host for this process;
+ * leave it unset and nothing changes.
+ */
+function keycloakIssuer(): string | undefined {
+  const base = process.env.AUTH_KEYCLOAK_ISSUER;
+  const lanHost = process.env.AUTH_KEYCLOAK_LOCALTESTS?.trim();
+  if (!base || !lanHost) return base;
+  try {
+    const url = new URL(base);
+    const [host, port] = lanHost.split(":");
+    url.hostname = host;
+    if (port) url.port = port;
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return base;
+  }
+}
+
 async function refreshAccessToken(token: JWT): Promise<JWT> {
   try {
-    const issuer = process.env.AUTH_KEYCLOAK_ISSUER;
+    const issuer = keycloakIssuer();
     if (!issuer || !token.refreshToken) {
       return { ...token, error: "RefreshAccessTokenError" };
     }
@@ -58,7 +83,7 @@ async function refreshAccessToken(token: JWT): Promise<JWT> {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
-  providers: [Keycloak],
+  providers: [Keycloak({ issuer: keycloakIssuer() })],
   session: { strategy: "jwt" },
   callbacks: {
     async jwt({ token, account }) {
@@ -67,6 +92,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.accessToken = account.access_token;
         token.refreshToken = account.refresh_token;
         token.expiresAt = account.expires_at;
+        // Kept server-side only (never copied onto the session): it is the
+        // id_token_hint that lets us end the Keycloak SSO session on sign-out.
+        token.idToken = account.id_token;
         token.roles = rolesFromAccessToken(account.access_token);
         return token;
       }
@@ -83,8 +111,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       session.accessToken = token.accessToken;
       session.roles = token.roles ?? [];
+      session.userSub = token.sub;
       session.error = token.error;
       return session;
+    },
+  },
+  events: {
+    /**
+     * RP-initiated logout. Clearing our own cookie is not enough: the Keycloak
+     * SSO session would survive, and the next sign-in would silently re-authenticate
+     * without ever asking for credentials. Done back-channel so the id_token never
+     * reaches the browser.
+     */
+    async signOut(message) {
+      const token = "token" in message ? message.token : null;
+      const issuer = keycloakIssuer();
+      if (!token?.idToken || !issuer) return;
+      try {
+        await fetch(
+          `${issuer}/protocol/openid-connect/logout?${new URLSearchParams({
+            id_token_hint: token.idToken,
+          })}`,
+          { method: "GET", cache: "no-store" },
+        );
+      } catch {
+        // Best-effort: never block the user from signing out locally.
+      }
     },
   },
 });

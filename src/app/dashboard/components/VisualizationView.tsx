@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import type {
+  DashboardRecord,
   FilterOption,
   Site,
   VariableRead,
@@ -9,9 +11,23 @@ import type {
   VisualizationCorrelationResponse,
   VisualizationTimeSeriesResponse,
 } from "@/app/services";
-import { ApiError, sitesService, visualizationService } from "@/app/services";
+import { ApiError, dashboardService, sitesService, visualizationService } from "@/app/services";
 import PlotlyFigure from "./PlotlyFigure";
 import type { PlotParams } from "react-plotly.js";
+
+/** Axis/trace labels handed to the module-level Plotly figure builders. */
+type FigureLabels = {
+  time: string;
+  value: string;
+  frequency: string;
+  variable: string;
+  site: string;
+  depth: string;
+  observations: string;
+  trendline: string;
+};
+
+type ProfileColorBy = "site" | "date";
 
 type VisualizationViewProps = {
   projectOptions: FilterOption[];
@@ -22,24 +38,15 @@ type VisualizationViewProps = {
   initialVariableId?: string;
 };
 
-type TabKey = "serie" | "sitio" | "correlacion";
+type TabKey = "serie" | "sitio" | "correlacion" | "perfil";
 
 type SeriesChartMode = "Líneas" | "Barras" | "Boxplot" | "Histograma";
 type SiteComparisonLimit = 10 | 20 | 50 | 0;
 
-const tabs: Array<{ key: TabKey; label: string }> = [
-  { key: "serie", label: "Serie Temporal" },
-  { key: "sitio", label: "Comparación por Sitio" },
-  { key: "correlacion", label: "Correlación" },
-];
+const TAB_KEYS: TabKey[] = ["serie", "sitio", "correlacion", "perfil"];
 
 const seriesChartModes: SeriesChartMode[] = ["Líneas", "Barras", "Boxplot", "Histograma"];
-const siteComparisonLimits: Array<{ label: string; value: SiteComparisonLimit }> = [
-  { label: "10 sitios", value: 10 },
-  { label: "20 sitios", value: 20 },
-  { label: "50 sitios", value: 50 },
-  { label: "Todos", value: 0 },
-];
+const siteComparisonLimitValues: SiteComparisonLimit[] = [10, 20, 50, 0];
 
 const seriesPalette = ["#16a34a", "#2563eb", "#f97316", "#7c3aed", "#0891b2", "#ef4444"];
 
@@ -71,7 +78,11 @@ const formatSiteLabel = (site: Site) => {
   return suffix ? `${site.site_code} · ${suffix}` : site.site_code;
 };
 
-const createPlotLayout = (overrides?: PlotParams["layout"]) : PlotParams["layout"] => ({
+// `barmode` is a valid Plotly layout key that the Layout type in the installed plotly.js typings
+// no longer declares, so it is allowed here explicitly.
+type LayoutOverrides = PlotParams["layout"] & { barmode?: "group" | "stack" | "overlay" | "relative" };
+
+const createPlotLayout = (overrides?: LayoutOverrides): PlotParams["layout"] => ({
   autosize: true,
   margin: { l: 48, r: 24, t: 24, b: 48 },
   paper_bgcolor: "rgba(0,0,0,0)",
@@ -86,7 +97,7 @@ const createPlotLayout = (overrides?: PlotParams["layout"]) : PlotParams["layout
   ...overrides,
 });
 
-const createLineFigure = (data: VisualizationTimeSeriesResponse): Pick<PlotParams, "data" | "layout"> => ({
+const createLineFigure = (data: VisualizationTimeSeriesResponse, L: FigureLabels): Pick<PlotParams, "data" | "layout"> => ({
   data: data.series.map((series, seriesIndex) => ({
     x: data.labels,
     y: series.values,
@@ -98,12 +109,12 @@ const createLineFigure = (data: VisualizationTimeSeriesResponse): Pick<PlotParam
     connectgaps: false,
   }) as PlotParams["data"][number]),
   layout: createPlotLayout({
-    xaxis: { title: { text: "Tiempo" }, showgrid: true, gridcolor: "#eef2f7" },
-    yaxis: { title: { text: "Valor" }, showgrid: true, gridcolor: "#eef2f7" },
+    xaxis: { title: { text: L.time }, showgrid: true, gridcolor: "#eef2f7" },
+    yaxis: { title: { text: L.value }, showgrid: true, gridcolor: "#eef2f7" },
   }),
 });
 
-const createBarFigure = (data: VisualizationTimeSeriesResponse): Pick<PlotParams, "data" | "layout"> => ({
+const createBarFigure = (data: VisualizationTimeSeriesResponse, L: FigureLabels): Pick<PlotParams, "data" | "layout"> => ({
   data: data.series.map((series, seriesIndex) => ({
     x: data.labels,
     y: series.values,
@@ -113,28 +124,30 @@ const createBarFigure = (data: VisualizationTimeSeriesResponse): Pick<PlotParams
   }) as PlotParams["data"][number]),
   layout: createPlotLayout({
     barmode: "group",
-    xaxis: { title: { text: "Tiempo" }, showgrid: true, gridcolor: "#eef2f7" },
-    yaxis: { title: { text: "Valor" }, showgrid: true, gridcolor: "#eef2f7" },
+    xaxis: { title: { text: L.time }, showgrid: true, gridcolor: "#eef2f7" },
+    yaxis: { title: { text: L.value }, showgrid: true, gridcolor: "#eef2f7" },
   }),
 });
 
-const createBoxFigure = (data: VisualizationTimeSeriesResponse): Pick<PlotParams, "data" | "layout"> => ({
-  data: data.series.map((series, seriesIndex) => ({
+// Boxplot describes the distribution of a SINGLE variable, so it only renders the
+// primary series (series[0]); the secondary variable is ignored for this chart.
+const createBoxFigure = (data: VisualizationTimeSeriesResponse, L: FigureLabels): Pick<PlotParams, "data" | "layout"> => ({
+  data: data.series.slice(0, 1).map((series) => ({
     y: getFiniteNumbers(series.values),
     type: "box" as const,
     name: series.variable_name,
     boxmean: "sd",
-    marker: { color: seriesPalette[seriesIndex % seriesPalette.length] },
-    line: { color: seriesPalette[seriesIndex % seriesPalette.length] },
+    boxpoints: "outliers",
+    marker: { color: seriesPalette[0] },
+    line: { color: seriesPalette[0] },
   }) as PlotParams["data"][number]),
   layout: createPlotLayout({
-    boxmode: "group",
-    yaxis: { title: { text: "Valor" }, showgrid: true, gridcolor: "#eef2f7" },
-    xaxis: { title: { text: "Variable" } },
+    yaxis: { title: { text: L.value }, showgrid: true, gridcolor: "#eef2f7" },
+    xaxis: { title: { text: L.variable } },
   }),
 });
 
-const createHistogramFigure = (data: VisualizationTimeSeriesResponse): Pick<PlotParams, "data" | "layout"> => ({
+const createHistogramFigure = (data: VisualizationTimeSeriesResponse, L: FigureLabels): Pick<PlotParams, "data" | "layout"> => ({
   data: data.series.map((series, seriesIndex) => ({
     x: getFiniteNumbers(series.values),
     type: "histogram" as const,
@@ -145,8 +158,8 @@ const createHistogramFigure = (data: VisualizationTimeSeriesResponse): Pick<Plot
   }) as PlotParams["data"][number]),
   layout: createPlotLayout({
     barmode: "overlay",
-    xaxis: { title: { text: "Valor" }, showgrid: true, gridcolor: "#eef2f7" },
-    yaxis: { title: { text: "Frecuencia" }, showgrid: true, gridcolor: "#eef2f7" },
+    xaxis: { title: { text: L.value }, showgrid: true, gridcolor: "#eef2f7" },
+    yaxis: { title: { text: L.frequency }, showgrid: true, gridcolor: "#eef2f7" },
   }),
 });
 
@@ -154,6 +167,7 @@ const createSiteComparisonFigure = (
   data: VisualizationBySiteResponse,
   labelsByCategory: Map<string, string>,
   limit: SiteComparisonLimit,
+  L: FigureLabels,
 ): Pick<PlotParams, "data" | "layout"> => {
   const rankedCategories = data.categories
     .map((category, index) => ({
@@ -178,8 +192,8 @@ const createSiteComparisonFigure = (
     }) as PlotParams["data"][number]),
     layout: createPlotLayout({
       barmode: "group",
-      xaxis: { title: { text: "Sitio" }, showgrid: false, tickangle: -25, automargin: true },
-      yaxis: { title: { text: "Valor" }, showgrid: true, gridcolor: "#eef2f7" },
+      xaxis: { title: { text: L.site }, showgrid: false, tickangle: -25, automargin: true },
+      yaxis: { title: { text: L.value }, showgrid: true, gridcolor: "#eef2f7" },
       margin: { l: 48, r: 24, t: 24, b: 120 },
     }),
   };
@@ -219,6 +233,7 @@ const createCorrelationFigure = (
   showTrendline: boolean,
   xTitle: string,
   yTitle: string,
+  L: FigureLabels,
 ): Pick<PlotParams, "data" | "layout"> => {
   const points = data.points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
   const trendline = showTrendline ? buildTrendline(points) : null;
@@ -230,7 +245,7 @@ const createCorrelationFigure = (
         y: points.map((point) => point.y),
         type: "scatter" as const,
         mode: "markers" as const,
-        name: "Observaciones",
+        name: L.observations,
         marker: { color: "#2563eb", size: 8, opacity: 0.8 },
         text: points.map((point) => `x: ${point.x.toFixed(3)}<br>y: ${point.y.toFixed(3)}`),
         hovertemplate: "%{text}<extra></extra>",
@@ -242,7 +257,7 @@ const createCorrelationFigure = (
               y: trendline.y,
               type: "scatter" as const,
               mode: "lines" as const,
-              name: "Línea de tendencia",
+              name: L.trendline,
               line: { color: "#991b1b", width: 3, dash: "dash" },
               hovertemplate: `y = ${trendline.slope.toFixed(4)}x + ${trendline.intercept.toFixed(4)}<extra></extra>`,
             } as PlotParams["data"][number],
@@ -273,6 +288,51 @@ const createCorrelationFigure = (
   };
 };
 
+// Depth profile: X = value, Y = depth (cm) with the axis reversed so 0 (surface)
+// is at the top. One trace per group (site or date), points ordered by depth.
+const createProfileFigure = (
+  records: DashboardRecord[],
+  colorBy: ProfileColorBy,
+  L: FigureLabels,
+): Pick<PlotParams, "data" | "layout"> => {
+  const groups = new Map<string, { x: number; y: number }[]>();
+  for (const r of records) {
+    const value = Number(r.value);
+    const depth = r.depth_cm;
+    if (!Number.isFinite(value) || depth === null || depth === undefined) {
+      continue;
+    }
+    const key = colorBy === "date" ? String(r.event_date ?? r.date ?? "—") : String(r.site_code ?? "—");
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key)!.push({ x: value, y: Number(depth) });
+  }
+
+  const data = Array.from(groups.entries()).map(([name, points], index) => {
+    const ordered = [...points].sort((a, b) => a.y - b.y);
+    const color = sitePalette[index % sitePalette.length];
+    return {
+      x: ordered.map((p) => p.x),
+      y: ordered.map((p) => p.y),
+      type: "scatter" as const,
+      mode: "lines+markers" as const,
+      name,
+      line: { color },
+      marker: { color, size: 7 },
+    } as PlotParams["data"][number];
+  });
+
+  return {
+    data,
+    layout: createPlotLayout({
+      hovermode: "closest",
+      xaxis: { title: { text: L.value }, showgrid: true, gridcolor: "#eef2f7" },
+      yaxis: { title: { text: L.depth }, autorange: "reversed", showgrid: true, gridcolor: "#eef2f7" },
+    }),
+  };
+};
+
 function ChartShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -285,17 +345,19 @@ function ChartShell({ title, subtitle, children }: { title: string; subtitle: st
   );
 }
 
-function VariableLegend({ primary, secondary }: { primary: string; secondary: string }) {
+function VariableLegend({ primary, secondary }: { primary: string; secondary?: string }) {
   return (
     <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-600">
       <span className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
         <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
         {primary}
       </span>
-      <span className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
-        <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
-        {secondary}
-      </span>
+      {secondary ? (
+        <span className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1">
+          <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
+          {secondary}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -308,6 +370,20 @@ export default function VisualizationView({
   initialSiteCode,
   initialVariableId,
 }: VisualizationViewProps) {
+  const t = useTranslations("visualization");
+  const figureLabels = useMemo<FigureLabels>(
+    () => ({
+      time: t("axis.time"),
+      value: t("axis.value"),
+      frequency: t("axis.frequency"),
+      variable: t("axis.variable"),
+      site: t("axis.site"),
+      depth: t("axis.depth"),
+      observations: t("trace.observations"),
+      trendline: t("trace.trendline"),
+    }),
+    [t],
+  );
   const [tab, setTab] = useState<TabKey>("serie");
   const [chartType, setChartType] = useState<SeriesChartMode>("Líneas");
   const [projectId, setProjectId] = useState<string>(
@@ -315,6 +391,8 @@ export default function VisualizationView({
   );
   const [siteId, setSiteId] = useState<string>(initialSiteId ?? "");
   const [siteOptions, setSiteOptions] = useState<FilterOption[]>([]);
+  // Only variables of the same matrix can be compared (a sample is one matrix).
+  const [matrix, setMatrix] = useState<string>("");
   const [primaryVariableId, setPrimaryVariableId] = useState<string>(
     initialVariableId || (variables[0]?.id ? String(variables[0].id) : ""),
   );
@@ -322,6 +400,8 @@ export default function VisualizationView({
   const [timeSeries, setTimeSeries] = useState<VisualizationTimeSeriesResponse | null>(null);
   const [siteComparison, setSiteComparison] = useState<VisualizationBySiteResponse | null>(null);
   const [correlation, setCorrelation] = useState<VisualizationCorrelationResponse | null>(null);
+  const [profile, setProfile] = useState<DashboardRecord[] | null>(null);
+  const [profileColorBy, setProfileColorBy] = useState<ProfileColorBy>("site");
   const [siteMetadata, setSiteMetadata] = useState<Site[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -335,10 +415,28 @@ export default function VisualizationView({
   const selectedSiteLabel =
     siteOptions.find((option) => String(option.id) === siteId)?.label ?? initialSiteCode ?? siteId;
 
-  const variableChoices = useMemo(
-    () => variables.map((variable) => ({ value: String(variable.id), label: formatVariableLabel(variable) })),
+  const matrixOptions = useMemo(
+    () => Array.from(new Set(variables.map((v) => v.matrix).filter((m): m is string => Boolean(m)))).sort(),
     [variables],
   );
+
+  const variableChoices = useMemo(
+    () =>
+      variables
+        .filter((variable) => !matrix || variable.matrix === matrix)
+        .map((variable) => ({ value: String(variable.id), label: formatVariableLabel(variable) })),
+    [variables, matrix],
+  );
+
+  // Switching matrix resets the two variable selections to valid same-matrix ones.
+  const onMatrixChange = (next: string) => {
+    setMatrix(next);
+    const filtered = variables.filter((v) => !next || v.matrix === next);
+    setPrimaryVariableId(filtered[0]?.id ? String(filtered[0].id) : "");
+    setSecondaryVariableId(
+      filtered[1]?.id ? String(filtered[1].id) : filtered[0]?.id ? String(filtered[0].id) : "",
+    );
+  };
 
   useEffect(() => {
     if (!projectId && projectOptions[0]?.id) {
@@ -423,7 +521,75 @@ export default function VisualizationView({
     }
   }, [siteId, tab]);
 
+  // Depth profile uses the long records dataset (it carries depth_cm), so it has
+  // its own loader; the shared effect below handles the other three tabs.
   useEffect(() => {
+    if (tab !== "perfil") {
+      return;
+    }
+    const projectIdNumber = projectId ? toNumber(projectId) : undefined;
+    const primaryIdNumber = primaryVariableId ? toNumber(primaryVariableId) : undefined;
+
+    if (!projectIdNumber || !primaryIdNumber) {
+      setProfile(null);
+      setError(null);
+      setEmptyReason(t("states.selectProjectVariable"));
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+    setError(null);
+    setEmptyReason(null);
+
+    dashboardService
+      .getRecordsDataset(
+        {
+          project_id: projectIdNumber,
+          variable_id: primaryIdNumber,
+          site_id: siteId ? toNumber(siteId) : undefined,
+        },
+        5000,
+      )
+      .then((response) => {
+        if (!active) {
+          return;
+        }
+        const withDepth = response.items.filter(
+          (r) => r.depth_cm !== null && r.depth_cm !== undefined && Number.isFinite(Number(r.value)),
+        );
+        const distinctDepths = new Set(withDepth.map((r) => r.depth_cm));
+        if (!withDepth.length) {
+          setProfile(null);
+          setEmptyReason(t("states.noDepthData"));
+          return;
+        }
+        setProfile(withDepth);
+        // Single depth layer → nothing to profile; warn but still show the point.
+        setEmptyReason(distinctDepths.size <= 1 ? t("states.singleDepth") : null);
+      })
+      .catch((requestError) => {
+        if (!active) {
+          return;
+        }
+        setError(requestError instanceof Error ? requestError.message : t("states.genericError"));
+        setProfile(null);
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [tab, projectId, primaryVariableId, siteId, t]);
+
+  useEffect(() => {
+    if (tab === "perfil") {
+      return;
+    }
     const projectIdNumber = projectId ? toNumber(projectId) : undefined;
     const primaryIdNumber = primaryVariableId ? toNumber(primaryVariableId) : undefined;
     const secondaryIdNumber = secondaryVariableId ? toNumber(secondaryVariableId) : undefined;
@@ -434,7 +600,7 @@ export default function VisualizationView({
       setSiteComparison(null);
       setCorrelation(null);
       setError(null);
-      setEmptyReason("Selecciona un proyecto y una variable principal.");
+      setEmptyReason(t("states.selectProjectVariable"));
       return;
     }
 
@@ -477,11 +643,7 @@ export default function VisualizationView({
             setSiteComparison(null);
             setCorrelation(null);
             setError(null);
-            setEmptyReason(
-              siteId
-                ? "El sitio seleccionado no tiene datos para esta variable. Prueba con otra variable o usa 'Ver todos los sitios'."
-                : "No hay fechas válidas o valores suficientes para construir la serie temporal.",
-            );
+            setEmptyReason(siteId ? t("states.noSiteData") : t("states.noValidDates"));
             return;
           }
 
@@ -498,13 +660,13 @@ export default function VisualizationView({
         }
 
         const apiError = requestError instanceof ApiError ? requestError : null;
-        const errorMessage = requestError instanceof Error ? requestError.message : "No se pudo cargar la visualización.";
+        const errorMessage = requestError instanceof Error ? requestError.message : t("states.genericError");
         const isUnsupportedAggregation = errorMessage.toLowerCase().includes("unsupported aggregation") || apiError?.status === 400;
         const isTemporalDataIssue = isDateFormattingError(errorMessage) || /strftime/i.test(JSON.stringify(apiError?.payload ?? ""));
 
         if (isUnsupportedAggregation || isTemporalDataIssue) {
           setError(null);
-          setEmptyReason("Todavía no hay fechas válidas o datos temporales suficientes para construir la visualización.");
+          setEmptyReason(t("states.tempIssue"));
         } else {
           setError(errorMessage);
           setEmptyReason(null);
@@ -525,14 +687,14 @@ export default function VisualizationView({
     };
   }, [primaryVariableId, projectId, secondaryVariableId, siteId, tab]);
 
-  const primaryVariableLabel = variableChoices.find((variable) => variable.value === primaryVariableId)?.label ?? "Variable principal";
-  const secondaryVariableLabel = variableChoices.find((variable) => variable.value === secondaryVariableId)?.label ?? "Variable secundaria";
+  const primaryVariableLabel = variableChoices.find((variable) => variable.value === primaryVariableId)?.label ?? t("legend.primaryFallback");
+  const secondaryVariableLabel = variableChoices.find((variable) => variable.value === secondaryVariableId)?.label ?? t("legend.secondaryFallback");
   const siteLabelsByCode = useMemo(() => new Map(siteMetadata.map((site) => [site.site_code, formatSiteLabel(site)])), [siteMetadata]);
-  const siteComparisonCaption = siteComparisonLimit > 0 ? `Mostrando los top ${siteComparisonLimit} sitios con mayor valor agregado` : "Mostrando todos los sitios disponibles";
+  const siteComparisonCaption = siteComparisonLimit > 0 ? t("chart.topSites", { count: siteComparisonLimit }) : t("chart.allSitesCaption");
 
   const chartBody = useMemo(() => {
     if (loading) {
-      return <div className="flex h-[24rem] items-center justify-center text-sm text-gray-500">Cargando datos de la gráfica...</div>;
+      return <div className="flex h-[24rem] items-center justify-center text-sm text-gray-500">{t("states.loading")}</div>;
     }
 
     if (error) {
@@ -546,26 +708,37 @@ export default function VisualizationView({
     if (tab === "serie" && timeSeries && !isUsableSeries(timeSeries)) {
       return (
         <div className="flex h-[24rem] items-center justify-center text-center text-sm text-amber-600">
-          {siteId
-            ? "El sitio seleccionado no tiene datos para esta variable. Prueba con otra variable o usa 'Ver todos los sitios'."
-            : "No hay fechas válidas o valores suficientes para construir la serie temporal."}
+          {siteId ? t("states.noSiteData") : t("states.noValidDates")}
         </div>
       );
+    }
+
+    // Line/bar charts need time variation; a single date has no evolution to show.
+    if (tab === "serie" && timeSeries && (chartType === "Líneas" || chartType === "Barras")) {
+      const distinctTimes = new Set((timeSeries.labels ?? []).map((label) => (label ?? "").trim()).filter(Boolean));
+      if (distinctTimes.size <= 1) {
+        return (
+          <div className="flex h-[24rem] items-center justify-center text-center text-sm text-amber-600">
+            {t("states.noTimeVariation")}
+          </div>
+        );
+      }
     }
 
     if (tab === "serie" && timeSeries) {
       const figure =
         chartType === "Barras"
-          ? createBarFigure(timeSeries)
+          ? createBarFigure(timeSeries, figureLabels)
           : chartType === "Boxplot"
-            ? createBoxFigure(timeSeries)
+            ? createBoxFigure(timeSeries, figureLabels)
             : chartType === "Histograma"
-              ? createHistogramFigure(timeSeries)
-              : createLineFigure(timeSeries);
+              ? createHistogramFigure(timeSeries, figureLabels)
+              : createLineFigure(timeSeries, figureLabels);
 
+      // Boxplot is single-variable: only the primary shows in the legend.
       return (
         <div>
-          <VariableLegend primary={primaryVariableLabel} secondary={secondaryVariableLabel} />
+          <VariableLegend primary={primaryVariableLabel} secondary={chartType === "Boxplot" ? undefined : secondaryVariableLabel} />
           <div className="h-[28rem]">
             <PlotlyFigure
               data={figure.data}
@@ -578,7 +751,7 @@ export default function VisualizationView({
     }
 
     if (tab === "sitio" && siteComparison) {
-      const figure = createSiteComparisonFigure(siteComparison, siteLabelsByCode, siteComparisonLimit);
+      const figure = createSiteComparisonFigure(siteComparison, siteLabelsByCode, siteComparisonLimit, figureLabels);
 
       return (
         <div className="h-[30rem]">
@@ -592,7 +765,7 @@ export default function VisualizationView({
     }
 
     if (tab === "correlacion" && correlation) {
-      const figure = createCorrelationFigure(correlation, showTrendline, primaryVariableLabel, secondaryVariableLabel);
+      const figure = createCorrelationFigure(correlation, showTrendline, primaryVariableLabel, secondaryVariableLabel, figureLabels);
 
       return (
         <div>
@@ -608,14 +781,41 @@ export default function VisualizationView({
       );
     }
 
-    return <div className="flex h-[24rem] items-center justify-center text-sm text-gray-500">No hay datos para mostrar con la configuración actual.</div>;
-  }, [chartType, correlation, emptyReason, error, loading, showTrendline, siteComparison, siteComparisonLimit, siteId, siteLabelsByCode, tab, timeSeries]);
+    if (tab === "perfil" && profile) {
+      const figure = createProfileFigure(profile, profileColorBy, figureLabels);
+
+      return (
+        <div>
+          <VariableLegend primary={primaryVariableLabel} secondary={undefined} />
+          <div className="h-[28rem]">
+            <PlotlyFigure
+              data={figure.data}
+              layout={figure.layout}
+              config={{ responsive: true, displayModeBar: true, displaylogo: false }}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    return <div className="flex h-[24rem] items-center justify-center text-sm text-gray-500">{t("states.noData")}</div>;
+  }, [chartType, correlation, emptyReason, error, figureLabels, loading, primaryVariableLabel, profile, profileColorBy, secondaryVariableLabel, showTrendline, siteComparison, siteComparisonLimit, siteId, siteLabelsByCode, t, tab, timeSeries]);
 
   const exportUrl = useMemo(() => {
     const projectIdNumber = projectId ? toNumber(projectId) : undefined;
     const primaryIdNumber = primaryVariableId ? toNumber(primaryVariableId) : undefined;
     const secondaryIdNumber = secondaryVariableId ? toNumber(secondaryVariableId) : undefined;
     const siteIdNumber = siteId ? toNumber(siteId) : undefined;
+
+    // The profile tab is not a chart-endpoint chart type; export its underlying
+    // records (value + depth) instead.
+    if (tab === "perfil") {
+      return dashboardService.exportRecords({
+        project_id: projectIdNumber,
+        variable_id: primaryIdNumber,
+        site_id: siteIdNumber,
+      });
+    }
 
     // The export endpoint keys off the active tab (timeseries|by-site|correlation),
     // not the series render style (Líneas/Barras/…).
@@ -638,21 +838,21 @@ export default function VisualizationView({
       <div className="mx-auto max-w-[1400px] space-y-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold text-gray-900">Visualización de Datos</h1>
-            <p className="mt-1 text-base text-gray-500">Gráficas configurables de variables de suelo</p>
+            <h1 className="text-3xl font-semibold text-gray-900">{t("title")}</h1>
+            <p className="mt-1 text-base text-gray-500">{t("subtitle")}</p>
           </div>
 
           <button
             type="button"
             onClick={() => window.open(exportUrl, "_blank", "noopener,noreferrer")}
-            className="inline-flex w-fit items-center gap-2 rounded-full border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            className="inline-flex w-fit items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
               <path d="M12 4v10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               <path d="M7 10l5 5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               <path d="M4 20h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
-            Exportar Gráfica
+            {t("exportChart")}
           </button>
         </div>
 
@@ -666,18 +866,21 @@ export default function VisualizationView({
                 </svg>
               </span>
               <div>
-                <p className="text-sm font-semibold text-amber-800">Modo por sitio</p>
+                <p className="text-sm font-semibold text-amber-800">{t("siteMode.title")}</p>
                 <p className="text-sm text-amber-700">
-                  Mostrando datos del sitio <span className="font-medium">{selectedSiteLabel}</span>. La comparación por sitio está deshabilitada.
+                  {t.rich("siteMode.showing", {
+                    site: selectedSiteLabel,
+                    b: (chunks) => <span className="font-medium">{chunks}</span>,
+                  })}
                 </p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setSiteId("")}
-              className="inline-flex w-fit items-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-700 shadow-sm transition hover:bg-amber-100"
+              className="inline-flex w-fit items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-700 shadow-sm transition hover:bg-amber-100"
             >
-              Ver todos los sitios
+              {t("siteMode.viewAll")}
             </button>
           </div>
         ) : null}
@@ -693,21 +896,21 @@ export default function VisualizationView({
               </svg>
             </div>
             <div>
-              <h2 className="text-lg font-medium text-gray-900">Configuración de Visualización</h2>
-              <p className="mt-1 text-sm text-gray-500">Seleccione el proyecto, variables y tipo de gráfica a visualizar</p>
+              <h2 className="text-lg font-medium text-gray-900">{t("config.title")}</h2>
+              <p className="mt-1 text-sm text-gray-500">{t("config.subtitle")}</p>
             </div>
           </div>
 
           <div className="mt-6 grid gap-4 lg:grid-cols-4">
             <label className="block">
-              <span className="mb-2 block text-sm text-gray-700">Proyecto</span>
+              <span className="mb-2 block text-sm text-gray-700">{t("config.project")}</span>
               <select
                 value={projectId}
                 onChange={(event) => {
                   setProjectId(event.target.value);
                   setSiteId("");
                 }}
-                className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white"
+                className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-brand-500 focus:bg-white"
               >
                 {projectOptions.map((option) => (
                   <option key={option.id ?? option.label} value={String(option.id ?? option.label)}>
@@ -718,13 +921,13 @@ export default function VisualizationView({
             </label>
 
             <label className="block">
-              <span className="mb-2 block text-sm text-gray-700">Sitio</span>
+              <span className="mb-2 block text-sm text-gray-700">{t("config.site")}</span>
               <select
                 value={siteId}
                 onChange={(event) => setSiteId(event.target.value)}
-                className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white"
+                className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-brand-500 focus:bg-white"
               >
-                <option value="">Todos los sitios</option>
+                <option value="">{t("config.allSites")}</option>
                 {siteOptions.map((option) => (
                   <option key={option.id ?? option.label} value={String(option.id ?? "")}>
                     {option.label}
@@ -733,9 +936,27 @@ export default function VisualizationView({
               </select>
             </label>
 
+            {matrixOptions.length > 0 ? (
+              <label className="block">
+                <span className="mb-2 block text-sm text-gray-700">{t("config.matrix")}</span>
+                <select
+                  value={matrix}
+                  onChange={(event) => onMatrixChange(event.target.value)}
+                  className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-brand-500 focus:bg-white"
+                >
+                  <option value="">{t("config.allMatrices")}</option>
+                  {matrixOptions.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
             <label className="block">
-              <span className="mb-2 block text-sm text-gray-700">Variable Principal</span>
-              <select value={primaryVariableId} onChange={(event) => setPrimaryVariableId(event.target.value)} className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white">
+              <span className="mb-2 block text-sm text-gray-700">{t("config.primaryVariable")}</span>
+              <select value={primaryVariableId} onChange={(event) => setPrimaryVariableId(event.target.value)} className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-brand-500 focus:bg-white">
                 {variableChoices.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -744,24 +965,27 @@ export default function VisualizationView({
               </select>
             </label>
 
-            <label className="block">
-              <span className="mb-2 block text-sm text-gray-700">Variable Secundaria</span>
-              <select value={secondaryVariableId} onChange={(event) => setSecondaryVariableId(event.target.value)} className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white">
-                {variableChoices.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {/* Boxplot and Profile are single-variable, so the secondary selector is hidden. */}
+            {(tab === "serie" && chartType === "Boxplot") || tab === "perfil" ? null : (
+              <label className="block">
+                <span className="mb-2 block text-sm text-gray-700">{t("config.secondaryVariable")}</span>
+                <select value={secondaryVariableId} onChange={(event) => setSecondaryVariableId(event.target.value)} className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-brand-500 focus:bg-white">
+                  {variableChoices.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             {tab === "serie" ? (
               <label className="block">
-                <span className="mb-2 block text-sm text-gray-700">Tipo de Gráfica</span>
-                <select value={chartType} onChange={(event) => setChartType(event.target.value as SeriesChartMode)} className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white">
+                <span className="mb-2 block text-sm text-gray-700">{t("config.chartType")}</span>
+                <select value={chartType} onChange={(event) => setChartType(event.target.value as SeriesChartMode)} className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-brand-500 focus:bg-white">
                   {seriesChartModes.map((mode) => (
                     <option key={mode} value={mode}>
-                      {mode}
+                      {t(`seriesMode.${mode}`)}
                     </option>
                   ))}
                 </select>
@@ -770,15 +994,15 @@ export default function VisualizationView({
 
             {tab === "sitio" ? (
               <label className="block">
-                <span className="mb-2 block text-sm text-gray-700">Sitios visibles</span>
+                <span className="mb-2 block text-sm text-gray-700">{t("config.visibleSites")}</span>
                 <select
                   value={siteComparisonLimit}
                   onChange={(event) => setSiteComparisonLimit(Number(event.target.value) as SiteComparisonLimit)}
-                  className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-green-500 focus:bg-white"
+                  className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-brand-500 focus:bg-white"
                 >
-                  {siteComparisonLimits.map((option) => (
-                    <option key={option.label} value={option.value}>
-                      {option.label}
+                  {siteComparisonLimitValues.map((value) => (
+                    <option key={value} value={value}>
+                      {value > 0 ? t("siteLimit.sites", { count: value }) : t("siteLimit.all")}
                     </option>
                   ))}
                 </select>
@@ -787,46 +1011,74 @@ export default function VisualizationView({
 
             {tab === "correlacion" ? (
               <label className="block">
-                <span className="mb-2 block text-sm text-gray-700">Tendencia</span>
+                <span className="mb-2 block text-sm text-gray-700">{t("config.trend")}</span>
                 <button
                   type="button"
                   onClick={() => setShowTrendline((current) => !current)}
-                  className={`flex h-11 w-full items-center justify-center rounded-lg border px-3 text-sm shadow-sm transition ${showTrendline ? "border-green-200 bg-green-50 text-green-700" : "border-gray-200 bg-gray-50 text-gray-700"}`}
+                  className={`flex h-11 w-full items-center justify-center rounded-lg border px-3 text-sm shadow-sm transition ${showTrendline ? "border-brand-200 bg-brand-50 text-brand-800" : "border-gray-200 bg-gray-50 text-gray-700"}`}
                 >
-                  {showTrendline ? "Ocultar línea" : "Mostrar línea"}
+                  {showTrendline ? t("config.hideLine") : t("config.showLine")}
                 </button>
+              </label>
+            ) : null}
+
+            {tab === "perfil" ? (
+              <label className="block">
+                <span className="mb-2 block text-sm text-gray-700">{t("config.colorBy")}</span>
+                <select
+                  value={profileColorBy}
+                  onChange={(event) => setProfileColorBy(event.target.value as ProfileColorBy)}
+                  className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm text-gray-700 shadow-sm outline-none transition focus:border-brand-500 focus:bg-white"
+                >
+                  <option value="site">{t("config.colorBySite")}</option>
+                  <option value="date">{t("config.colorByDate")}</option>
+                </select>
               </label>
             ) : null}
           </div>
 
           <p className="mt-4 text-sm text-gray-500">
-            Los filtros de proyecto y variables afectan a todos los tabs. El selector de tipo de gráfica solo cambia la representación del tab de Serie Temporal.
+            {t("config.note")}
           </p>
         </section>
 
         <div className="flex w-fit flex-wrap gap-1 rounded-full border border-gray-200 bg-white p-1 shadow-sm">
-          {tabs.map((item) => {
-            const disabled = item.key === "sitio" && Boolean(siteId);
+          {TAB_KEYS.map((key) => {
+            const disabled = key === "sitio" && Boolean(siteId);
             return (
               <button
-                key={item.key}
+                key={key}
                 type="button"
                 disabled={disabled}
-                title={disabled ? "Selecciona 'Todos los sitios' para comparar entre sitios" : undefined}
-                onClick={() => setTab(item.key)}
+                title={disabled ? t("tabDisabledHint") : undefined}
+                onClick={() => setTab(key)}
                 className={`rounded-full px-4 py-2 text-sm transition ${
-                  tab === item.key ? "bg-gray-100 text-gray-900 shadow-sm" : "text-gray-600 hover:bg-gray-50"
+                  tab === key ? "bg-gray-100 text-gray-900 shadow-sm" : "text-gray-600 hover:bg-gray-50"
                 } ${disabled ? "cursor-not-allowed opacity-40 hover:bg-transparent" : ""}`}
               >
-                {item.label}
+                {t(`tabs.${key}`)}
               </button>
             );
           })}
         </div>
 
         <ChartShell
-          title={tab === "serie" ? "Evolución Temporal de Variables" : tab === "sitio" ? "Comparación por Sitio de Muestreo" : "Correlación entre Variables"}
-          subtitle={tab === "serie" ? `Variación de ${primaryVariableLabel} y ${secondaryVariableLabel} a lo largo del tiempo` : tab === "sitio" ? `${siteComparisonCaption}. Se comparan ${primaryVariableLabel} y ${secondaryVariableLabel} por sitio.` : `Relación exploratoria entre ${primaryVariableLabel} y ${secondaryVariableLabel}`}
+          title={
+            tab === "serie"
+              ? chartType === "Boxplot" ? t("chart.boxplotTitle") : t("chart.serieTitle")
+              : tab === "sitio" ? t("chart.sitioTitle") : tab === "perfil" ? t("chart.perfilTitle") : t("chart.correlacionTitle")
+          }
+          subtitle={
+            tab === "serie"
+              ? chartType === "Boxplot"
+                ? t("chart.boxplotSubtitle", { primary: primaryVariableLabel })
+                : t("chart.serieSubtitle", { primary: primaryVariableLabel, secondary: secondaryVariableLabel })
+              : tab === "sitio"
+                ? t("chart.sitioSubtitle", { caption: siteComparisonCaption, primary: primaryVariableLabel, secondary: secondaryVariableLabel })
+                : tab === "perfil"
+                  ? t("chart.perfilSubtitle", { primary: primaryVariableLabel })
+                  : t("chart.correlacionSubtitle", { primary: primaryVariableLabel, secondary: secondaryVariableLabel })
+          }
         >
           {chartBody}
         </ChartShell>

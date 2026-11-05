@@ -1,41 +1,26 @@
-import Link from "next/link";
-import { dashboardService } from "@/app/services";
+import { getLocale, getTranslations } from "next-intl/server";
+import { auth } from "@/auth";
+import { canUpload, canManageCatalog } from "@/app/lib/roles";
+import { readGlobalFilters } from "@/app/lib/globalFilters";
+import { dashboardService, datasetService } from "@/app/services";
+import type { DatasetCatalogueItem } from "@/app/services";
 import DashboardFilters from "./components/DashboardFilters";
-
-const badgeStyles: Record<string, string> = {
-  Validado: "bg-green-100 text-green-700",
-  Pendiente: "bg-gray-100 text-gray-600",
-};
+import DatasetCatalogue from "./components/DatasetCatalogue";
+import { yearMatches, yearOptionsFrom } from "./components/datasetYear";
+import { FieldHelp } from "./components/FieldHelp";
 
 type DashboardSearchParams = {
-  search?: string;
-  project_id?: string;
-  site_id?: string;
-  sample_type_id?: string;
+  institution?: string;
   matrix?: string;
-  variable_id?: string;
-  date_from?: string;
-  date_to?: string;
+  year?: string;
 };
 
-const formatNumber = (value: number | undefined | null) => {
+const formatNumber = (value: number | undefined | null, locale: string) => {
   if (value === undefined || value === null) {
     return "—";
   }
 
-  return new Intl.NumberFormat("es-CO").format(value);
-};
-
-const formatValue = (value: string | number | boolean | null) => {
-  if (value === null || value === undefined) {
-    return "—";
-  }
-
-  if (typeof value === "boolean") {
-    return value ? "Sí" : "No";
-  }
-
-  return String(value);
+  return new Intl.NumberFormat(locale === "en" ? "en-US" : "es-CO").format(value);
 };
 
 export default async function DashboardPage({
@@ -44,75 +29,76 @@ export default async function DashboardPage({
   searchParams?: Promise<DashboardSearchParams>;
 }) {
   const normalizedParams: DashboardSearchParams = await (searchParams ?? Promise.resolve<DashboardSearchParams>({}));
-  const selectedProjectId = normalizedParams.project_id ? Number(normalizedParams.project_id) : undefined;
+  const t = await getTranslations("dashboard");
+  const locale = await getLocale();
+  const session = await auth();
+  const globalFilters = await readGlobalFilters();
 
-  const queryFilters = {
-    search: normalizedParams.search,
-    project_id: selectedProjectId,
-    site_id: normalizedParams.site_id ? Number(normalizedParams.site_id) : undefined,
-    sample_type_id: normalizedParams.sample_type_id ? Number(normalizedParams.sample_type_id) : undefined,
-    matrix: normalizedParams.matrix,
-    variable_id: normalizedParams.variable_id ? Number(normalizedParams.variable_id) : undefined,
-    date_from: normalizedParams.date_from,
-    date_to: normalizedParams.date_to,
-    limit: 25,
-    skip: 0,
-  };
+  // The URL wins over the cookie (so a shared `?institution=X` link keeps working);
+  // the cookie only fills in when the URL doesn't say anything (see lib/globalFilters.ts).
+  const institution = normalizedParams.institution ?? globalFilters.institution ?? "";
+  const matrix = normalizedParams.matrix ?? globalFilters.matrix ?? "";
+  const year = normalizedParams.year ?? "";
 
-  const [summaryResult, recordsResult, projectsResult, sitesResult, sampleTypesResult, matricesResult, variablesResult] =
-    await Promise.allSettled([
-    dashboardService.getSummary(),
-    dashboardService.getRecords(queryFilters),
+  const [summaryResult, institutionsResult, itemsResult, projectsResult] = await Promise.allSettled([
+    dashboardService.getSummary(institution || undefined),
+    dashboardService.getInstitutionOptions(),
+    datasetService.getCatalogue(),
     dashboardService.getProjectsOptions(),
-    selectedProjectId ? dashboardService.getSitesOptions(selectedProjectId) : Promise.resolve([]),
-    dashboardService.getSampleTypes(),
-    dashboardService.getMatrices(),
-    dashboardService.getVariableOptions(),
   ]);
 
   const summary = summaryResult.status === "fulfilled" ? summaryResult.value : null;
-  const records = recordsResult.status === "fulfilled" ? recordsResult.value.items : [];
-  const totalRecords = recordsResult.status === "fulfilled" ? recordsResult.value.total : records.length;
-  const projectOptions = projectsResult.status === "fulfilled" ? projectsResult.value : [];
-  const siteOptions = sitesResult.status === "fulfilled" ? sitesResult.value : [];
-  const sampleTypeOptions = sampleTypesResult.status === "fulfilled" ? sampleTypesResult.value : [];
-  const matrixOptions = matricesResult.status === "fulfilled" ? matricesResult.value : [];
-  const variableOptions = variablesResult.status === "fulfilled" ? variablesResult.value : [];
+  const institutionOptions = institutionsResult.status === "fulfilled" ? institutionsResult.value : [];
+  const items: DatasetCatalogueItem[] = itemsResult.status === "fulfilled" ? itemsResult.value : [];
+  // The catalogue lists every dataset (its ficha is public), but the data behind some is not
+  // open to everyone: the explore links need to know which ones this user can actually open.
+  const accessibleProjectIds =
+    projectsResult.status === "fulfilled"
+      ? projectsResult.value.map((p) => p.id).filter((id): id is number => typeof id === "number")
+      : null;
+  // Cascading filters: each selector counts the datasets that match the OTHER two, so it only
+  // offers values that leave something on screen (and says how many).
+  const matching = (skip: "institution" | "matrix" | "year") =>
+    items.filter(
+      (i) =>
+        (skip === "institution" || !institution || i.data_source === institution) &&
+        (skip === "matrix" || !matrix || (i.expected_matrices ?? []).includes(matrix)) &&
+        (skip === "year" || !year || yearMatches(i, year)),
+    );
+  const tally = (values: string[]) => values.reduce<Record<string, number>>((acc, v) => ({ ...acc, [v]: (acc[v] ?? 0) + 1 }), {});
+  const institutionCounts = tally(matching("institution").map((i) => i.data_source ?? "").filter(Boolean));
+  const matrixCounts = tally(matching("matrix").flatMap((i) => i.expected_matrices ?? []));
+  const yearPool = matching("year");
+  const yearOptions = yearOptionsFrom(yearPool);
+  // A year already chosen stays selectable even when another filter now leaves no dataset in it.
+  if (year && !yearOptions.includes(year)) yearOptions.unshift(year);
+  const yearCounts = Object.fromEntries(yearOptions.map((y) => [y, yearPool.filter((i) => yearMatches(i, y)).length]));
+  const countriesCount = new Set(items.flatMap((i) => i.countries ?? [])).size;
 
   const stats = [
-    { label: "Proyectos", value: summary?.projects },
-    { label: "Sitios", value: summary?.sites },
-    { label: "Muestras", value: summary?.samples },
-    { label: "Variables", value: summary?.variables },
-    { label: "Mediciones", value: summary?.measurements },
+    { key: "sites", label: t("stats.sites"), value: summary?.sites },
+    { key: "samples", label: t("stats.samples"), value: summary?.samples },
+    { key: "variables", label: t("stats.variables"), value: summary?.variables },
+    { key: "datasets", label: t("stats.datasets"), value: items.length },
+    { key: "countries", label: t("stats.countries"), value: countriesCount },
   ];
-
-  const exportUrl = dashboardService.exportRecords(queryFilters);
 
   return (
     <div className="px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
       <div className="mx-auto max-w-[1400px] space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold text-gray-900">Dashboard</h1>
-            <p className="mt-1 text-base text-gray-500">Exploración y consulta de datos de investigación</p>
-          </div>
-
-          <Link href={exportUrl} className="inline-flex w-fit items-center gap-2 rounded-full bg-green-600 px-5 py-3 text-sm font-medium text-white shadow-sm hover:bg-green-700">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M12 4v10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              <path d="M7 10l5 5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M4 20h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-            Exportar Datos
-          </Link>
+        <div>
+          <h1 className="text-3xl font-semibold text-gray-900">{t("title")}</h1>
+          <p className="mt-1 text-base text-gray-500">{t("subtitle")}</p>
         </div>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {stats.map((stat) => (
-            <div key={stat.label} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="text-sm text-gray-400">{stat.label}</div>
-              <div className="mt-2 text-4xl font-light text-gray-900">{formatNumber(stat.value)}</div>
+            <div key={stat.key} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-1.5 text-sm text-gray-400">
+                {stat.label}
+                <FieldHelp text={t(`stats.help.${stat.key}`)} />
+              </div>
+              <div className="mt-2 text-4xl font-light text-gray-900">{formatNumber(stat.value, locale)}</div>
             </div>
           ))}
         </section>
@@ -125,90 +111,26 @@ export default async function DashboardPage({
               </svg>
             </div>
             <div>
-              <h2 className="text-lg font-medium text-gray-900">Filtros de Búsqueda</h2>
-              <p className="mt-1 text-sm text-gray-500">Filtre los datos por proyecto, sitio, tipo de muestra, matriz, variable y rango de fechas</p>
+              <h2 className="text-lg font-medium text-gray-900">{t("filtersTitle")}</h2>
+              <p className="mt-1 text-sm text-gray-500">{t("filtersSubtitle")}</p>
             </div>
           </div>
 
           <DashboardFilters
-            initialValues={normalizedParams}
-            projectOptions={projectOptions}
-            siteOptions={siteOptions}
-            sampleTypeOptions={sampleTypeOptions}
-            matrixOptions={matrixOptions}
-            variableOptions={variableOptions}
+            values={{ institution, matrix, year }}
+            institutionOptions={institutionOptions}
+            yearOptions={yearOptions}
+            counts={{ institution: institutionCounts, matrix: matrixCounts, year: yearCounts }}
           />
         </section>
 
-        <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-lg font-medium text-gray-900">Resultados de Búsqueda</h2>
-              <p className="text-sm text-gray-500">Mostrando {records.length} de {totalRecords} registros</p>
-            </div>
-
-            {recordsResult.status === "rejected" ? (
-              <p className="text-sm text-amber-600">No se pudo cargar la consulta principal; revisa el endpoint /dashboard/records.</p>
-            ) : null}
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
-              <thead>
-                <tr className="text-xs uppercase tracking-wide text-gray-500">
-                  {[
-                    "Código Muestra",
-                    "Proyecto",
-                    "Sitio",
-                    "Tipo",
-                    "Variable",
-                    "Matriz",
-                    "Valor",
-                    "Unidad",
-                    "Fecha",
-                    "Laboratorio",
-                    "Estado",
-                  ].map((heading) => (
-                    <th key={heading} className="border-b border-gray-200 px-4 py-3 font-medium">
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {records.length > 0 ? (
-                  records.map((record) => (
-                    <tr key={`${record.sample_code}-${record.variable_id}`} className="text-gray-700">
-                      <td className="border-b border-gray-100 px-4 py-4 align-top">{record.sample_code}</td>
-                      <td className="border-b border-gray-100 px-4 py-4 align-top">{record.project_name}</td>
-                      <td className="border-b border-gray-100 px-4 py-4 align-top">{record.site_name}</td>
-                      <td className="border-b border-gray-100 px-4 py-4 align-top">{record.sample_type}</td>
-                      <td className="border-b border-gray-100 px-4 py-4 align-top">{record.variable_name}</td>
-                      <td className="border-b border-gray-100 px-4 py-4 align-top">
-                        <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">{record.matrix}</span>
-                      </td>
-                      <td className="border-b border-gray-100 px-4 py-4 align-top">{formatValue(record.value)}</td>
-                      <td className="border-b border-gray-100 px-4 py-4 align-top">{record.unit ?? "—"}</td>
-                      <td className="border-b border-gray-100 px-4 py-4 align-top">{record.event_date ?? record.date ?? "—"}</td>
-                      <td className="border-b border-gray-100 px-4 py-4 align-top">{record.laboratory ?? "—"}</td>
-                      <td className="border-b border-gray-100 px-4 py-4 align-top">
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${badgeStyles[record.status] ?? "bg-gray-100 text-gray-600"}`}>
-                          {record.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={11} className="px-4 py-10 text-center text-sm text-gray-500">
-                      No hay registros disponibles para mostrar en este momento.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <DatasetCatalogue
+          initialItems={items}
+          canEdit={canUpload(session?.roles)}
+          canEditQc={canManageCatalog(session?.roles)}
+          filters={{ institution, matrix, year }}
+          accessibleProjectIds={accessibleProjectIds}
+        />
       </div>
     </div>
   );

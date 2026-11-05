@@ -1,0 +1,128 @@
+name: CI/CD Frontend
+
+# develop  -> every push is checked (fast feedback while working).
+# PR to stage -> checked before it can be merged.
+# stage    -> checked again on the merged result; if green it is merged into main
+#             and a release is cut. Nothing else touches main.
+
+on:
+  push:
+    branches: [develop, stage]
+  pull_request:
+    branches: [stage]
+  workflow_dispatch:
+
+# A newer push to develop / a PR supersedes the run before it, but a promotion that is
+# already running on stage is never cancelled half-way.
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/stage' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ------------------------------------------------------------------ CHECKS ----
+  test:
+    name: Lint, types, tests and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Placeholders: the build only needs these to exist, nothing is contacted.
+      API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      AUTH_SECRET: ci-only-secret
+      AUTH_KEYCLOAK_ISSUER: http://localhost:8080/realms/mfl
+      AUTH_KEYCLOAK_ID: ci
+      AUTH_KEYCLOAK_SECRET: ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit and component tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+  # ---------------------------------------------------------------- PROMOTE ----
+  promote:
+    name: Merge stage into main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/stage'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: frontend-promote
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # If main is protected, use a token that may push to it (see README).
+          token: ${{ secrets.PROMOTE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Merge the tested commit into main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B main origin/main
+          # The exact commit that passed the checks, not whatever stage points to by now.
+          git merge --no-ff "$GITHUB_SHA" -m "Promote stage to main (${GITHUB_SHA::7})"
+          git push origin main
+
+  # ---------------------------------------------------------------- RELEASE ----
+  release:
+    name: Create release
+    needs: promote
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Next version
+        id: version
+        run: |
+          last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+          if [ -z "$last" ]; then
+            next="v0.1.0"
+          else
+            IFS=. read -r major minor patch <<< "${last#v}"
+            next="v${major}.${minor}.$((patch + 1))"
+          fi
+          echo "tag=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --target main \
+            --title "Release ${{ steps.version.outputs.tag }}" \
+            --generate-notes

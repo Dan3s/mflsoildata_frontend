@@ -17,8 +17,8 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Cargar Datos is restricted to editors/admins.
-  if (path.startsWith("/dashboard/cargar") && !canUpload(req.auth.roles)) {
+  // Cargar Datos is restricted to editors/database editors/admins (see canUpload).
+  if (path.startsWith("/dashboard/upload") && !canUpload(req.auth.roles)) {
     return NextResponse.redirect(new URL("/dashboard?denied=cargar", nextUrl));
   }
 

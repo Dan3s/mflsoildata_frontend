@@ -1,9 +1,12 @@
-"use client";
-
+import { getTranslations } from "next-intl/server";
+import Link from "next/link";
+import { Database, MapPin, FlaskConical, Globe, ArrowRight } from "lucide-react";
 import Header from "@/app/components/Header";
 import Footer from "@/app/components/Footer";
 import FeatureCard from "@/app/components/FeatureCard";
+import WavyUnderline from "@/app/components/WavyUnderline";
 import { UIButtonLink } from "@/app/components/ui/button";
+import { dashboardService } from "@/app/services";
 
 const IconDatabase = (
   <svg width="20" height="20" fill="none" viewBox="0 0 24 24" aria-hidden>
@@ -53,49 +56,114 @@ const IconRobot = (
   </svg>
 );
 
-export default function Home() {
+/** Cycled across the stats tiles and the feature cards so nothing is a single flat color. */
+const ACCENT_COLORS = [
+  "bg-brand-100 text-brand-800",
+  "bg-earth-100 text-earth-800",
+  "bg-teal-100 text-teal-800",
+  "bg-purple-100 text-purple-800",
+];
+
+function HowItWorksCard({ icon, title, body, href }: { icon: React.ReactNode; title: string; body: string; href: string }) {
+  return (
+    <Link
+      href={href}
+      className="group block rounded-xl border border-gray-200 bg-white p-6 shadow-sm transition hover:border-brand-300 hover:shadow-md"
+    >
+      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-brand-100 text-brand-800">
+        {icon}
+      </div>
+      <h4 className="mb-2 text-base font-semibold text-gray-800">{title}</h4>
+      <p className="mb-3 text-sm text-gray-600">{body}</p>
+      <ArrowRight className="h-4 w-4 text-brand-700 transition-transform group-hover:translate-x-1" />
+    </Link>
+  );
+}
+
+export default async function Home() {
+  const t = await getTranslations("home");
+  const summary = await dashboardService.getPublicSummary().catch(() => null);
+
+  const stats = [
+    { key: "datasets", label: t("stats.datasets"), value: summary?.datasets, icon: <Database className="h-5 w-5" /> },
+    { key: "sites", label: t("stats.sites"), value: summary?.sites, icon: <MapPin className="h-5 w-5" /> },
+    { key: "samples", label: t("stats.samples"), value: summary?.samples, icon: <FlaskConical className="h-5 w-5" /> },
+    { key: "countries", label: t("stats.countries"), value: summary?.countries, icon: <Globe className="h-5 w-5" /> },
+  ];
+
   return (
     <div className="bg-white">
       <Header />
 
-      <section className="bg-gradient-to-b from-green-50 to-white">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
+      <section className="bg-gradient-to-br from-brand-800 to-brand-900 pb-24">
+        <div className="mx-auto max-w-6xl px-4 pt-20 sm:px-6 lg:px-8">
           <div className="text-center">
-            <h1 className="mb-4 text-3xl font-extrabold text-gray-900 sm:text-4xl">Plataforma de Gestión de Datos de Suelos</h1>
-            <p className="mx-auto max-w-2xl text-sm text-gray-600">
-              Sistema centralizado para el equipo Multifunctional Landscapes de Alianza Bioversity Internacional - CIAT. Almacena, analiza y visualiza datos de investigación de suelos, paisajes y sostenibilidad agrícola.
-            </p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-brand-200">{t("eyebrow")}</p>
+            <h1 className="mb-4 text-3xl font-extrabold text-white sm:text-4xl">{t("heroTitle")}</h1>
+            <p className="mx-auto max-w-2xl text-sm text-brand-100">{t("heroSubtitle")}</p>
 
-            <div className="mt-6 flex items-center justify-center gap-4">
-              <UIButtonLink href="/dashboard" size="lg" className="rounded-full px-5 py-2.5 text-xs">
-                Comenzar
+            <div className="mt-8 flex items-center justify-center gap-4">
+              <UIButtonLink href="/dashboard" size="lg" className="px-5 py-2.5 text-xs">
+                {t("start")}
               </UIButtonLink>
-              <UIButtonLink href="/dashboard" variant="secondary" size="lg" className="rounded-full px-5 py-2.5 text-xs">
-                Ver Documentación
+              <UIButtonLink href="/dashboard" variant="secondary" size="lg" className="px-5 py-2.5 text-xs">
+                {t("viewDocs")}
               </UIButtonLink>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="text-center">
-          <h2 className="mb-2 text-xl font-semibold text-gray-900">Funcionalidades Principales</h2>
-          <p className="mx-auto mb-8 max-w-2xl text-sm text-gray-600">Herramientas diseñadas específicamente para facilitar la gestión y análisis de datos de investigación de suelos.</p>
+      {/* Floating stats card, overlapping the hero/next-section boundary. */}
+      <div className="mx-auto -mt-14 max-w-5xl px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-2 gap-6 rounded-2xl bg-white p-6 shadow-lg sm:grid-cols-4 sm:p-8">
+          {stats.map((stat, i) => (
+            <div key={stat.key} className="flex flex-col items-center text-center">
+              <div className={`mb-2 flex h-10 w-10 items-center justify-center rounded-full ${ACCENT_COLORS[i]}`}>
+                {stat.icon}
+              </div>
+              <div className="text-2xl font-bold text-gray-900">{stat.value ?? "—"}</div>
+              <div className="text-xs text-gray-500">{stat.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <section className="mx-auto max-w-6xl px-4 pb-16 pt-20 sm:px-6 lg:px-8">
+        <div className="mb-10 text-center">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-earth-600">{t("howItWorks.eyebrow")}</p>
+          <h2 className="mb-3 text-xl font-semibold text-gray-900">{t("howItWorks.title")}</h2>
+          <WavyUnderline className="mb-4 text-earth-400" />
+          <p className="mx-auto max-w-2xl text-sm text-gray-600">{t("howItWorks.subtitle")}</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <FeatureCard icon={IconDatabase} title="Base de Datos Centralizada">PostgreSQL con PostGIS para almacenar todos los datos de proyectos de investigación de suelos de forma unificada y escalable.</FeatureCard>
-          <FeatureCard icon={IconChart} title="Visualización de Datos">Gráficas configurables y dashboards interactivos para analizar variables de suelo, clima y vegetación por proyecto y sitio.</FeatureCard>
-          <FeatureCard icon={IconMap} title="Mapas Geográficos">Visualización espacial de sitios de muestreo con información geográfica detallada y capas de datos contextuales.</FeatureCard>
-          <FeatureCard icon={IconUpload} title="Carga de Datos">Importación sencilla desde Excel usando plantillas personalizables, con validación automática de estructura de datos.</FeatureCard>
-          <FeatureCard icon={IconDownload} title="Exportación Flexible">Descarga de datos filtrados en formatos estándar (CSV, Excel) para análisis externo y compartir con colaboradores.</FeatureCard>
-          <FeatureCard icon={IconRobot} title="Agente IA">Inteligencia artificial para interpretar datos de suelo, generar insights y responder preguntas sobre los resultados.</FeatureCard>
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+          <HowItWorksCard icon={IconChart} title={t("howItWorks.explore.title")} body={t("howItWorks.explore.body")} href="/dashboard" />
+          <HowItWorksCard icon={IconUpload} title={t("howItWorks.upload.title")} body={t("howItWorks.upload.body")} href="/dashboard/upload" />
+          <HowItWorksCard icon={IconDownload} title={t("howItWorks.download.title")} body={t("howItWorks.download.body")} href="/dashboard/download" />
+        </div>
+      </section>
+
+      <section className="bg-gray-50">
+        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <h2 className="mb-3 text-xl font-semibold text-gray-900">{t("featuresTitle")}</h2>
+            <WavyUnderline className="mb-4 text-brand-400" />
+            <p className="mx-auto mb-8 max-w-2xl text-sm text-gray-600">{t("featuresSubtitle")}</p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <FeatureCard icon={IconDatabase} title={t("features.databaseTitle")} iconColorClass={ACCENT_COLORS[0]}>{t("features.databaseBody")}</FeatureCard>
+            <FeatureCard icon={IconChart} title={t("features.vizTitle")} iconColorClass={ACCENT_COLORS[1]}>{t("features.vizBody")}</FeatureCard>
+            <FeatureCard icon={IconMap} title={t("features.mapTitle")} iconColorClass={ACCENT_COLORS[2]}>{t("features.mapBody")}</FeatureCard>
+            <FeatureCard icon={IconUpload} title={t("features.uploadTitle")} iconColorClass={ACCENT_COLORS[3]}>{t("features.uploadBody")}</FeatureCard>
+            <FeatureCard icon={IconDownload} title={t("features.downloadTitle")} iconColorClass={ACCENT_COLORS[0]}>{t("features.downloadBody")}</FeatureCard>
+            <FeatureCard icon={IconRobot} title={t("features.aiTitle")} iconColorClass={ACCENT_COLORS[1]}>{t("features.aiBody")}</FeatureCard>
+          </div>
         </div>
       </section>
 
       <Footer />
-
     </div>
   );
 }

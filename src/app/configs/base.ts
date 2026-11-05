@@ -9,7 +9,7 @@ export interface AppConfig {
 
 export const baseConfig: AppConfig = {
   name: "default",
-  displayName: "MFL Soil Data",
+  displayName: "CGIAR Soil - GHG Datahub",
   about: {
     title: "Sobre la plataforma",
     description: "Estructura base lista para agregar secciones y vistas.",
