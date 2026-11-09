@@ -23,7 +23,7 @@ pipeline {
         CONDA_SH  = '/opt/miniforge3/etc/profile.d/conda.sh'
         CONDA_ENV = 'mplsoildata-frontend'
         PM2_APP   = 'mfl_frontend'
-        WEB_PORT  = '3000'
+        WEB_PORT  = '3403'   // the port IT opened for this app
     }
 
     stages {
@@ -94,6 +94,9 @@ pipeline {
                             echo "Port ${env.WEB_PORT} is already used by another process" >&2
                             exit 1
                         fi
+                        # A restart keeps the arguments the process was first started with, so a changed
+                        # port would be ignored: drop our own process (not others') and start it afresh.
+                        pm2 delete ${env.PM2_APP} > /dev/null 2>&1 || true
                         pm2 startOrRestart ecosystem.config.js --only ${env.PM2_APP} --update-env
                         pm2 save
                     """
