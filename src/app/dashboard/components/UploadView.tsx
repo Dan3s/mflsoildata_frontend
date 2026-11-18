@@ -2,32 +2,34 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Info, Upload, Check, ArrowRight, CheckCircle, XCircle, Download, Loader2, AlertTriangle, Plus, X, ChevronDown, Search, Clock, ArrowRightLeft, ArrowLeft, Database, ExternalLink, FileText, Lock } from "lucide-react";
+import { Info, Upload, Check, ArrowRight, CheckCircle, XCircle, Download, Loader2, AlertTriangle, Plus, X, ChevronDown, Search, Clock, ArrowLeft, Database, ExternalLink, FileText, Lock, Compass } from "lucide-react";
 import type {
   AccessLevel,
   ColumnMappingEntry,
   DataverseFileInfo,
   DataversePreviewResponse,
-  FilterOption,
   TemplateColumn,
   TemplateColumnGroup,
   UploadValidationResponse,
   UploadImportResponse,
   UserOption,
   AgrovocTerm,
+  DatasetCatalogueItem,
+  ProjectMetadata,
+  ProjectMetadataUpsert,
 } from "@/app/services";
-import { ApiError, dataverseService, uploadService, userService, variablesService } from "@/app/services";
+import { ApiError, datasetService, dataverseService, uploadService, userService } from "@/app/services";
 import ManualRegistration from "./ManualRegistration";
 import ColumnGlossary from "./ColumnGlossary";
-import KeywordsPicker from "./KeywordsPicker";
+import NewVariableModal from "./NewVariableModal";
+import KeywordsPicker, { toTerms } from "./KeywordsPicker";
 import { FieldHelp } from "./FieldHelp";
+import { LicenseSelect } from "./LicenseSelect";
 import { useDataverseDownload, type UseDataverseDownload } from "./useDataverseDownload";
+import { resetUploadTour, useUploadTour, type UploadTourStep } from "./useUploadTour";
 import { DataverseGuestbookForm } from "./DataverseGuestbookForm";
-import { MATRIX_OPTIONS } from "@/app/lib/matrixColors";
-import { normalizeCode } from "@/app/lib/normalizeCode";
-import { suggestMapping, type FileColumn } from "@/app/lib/columnMapping";
+import { looksLikeTemplate, suggestMapping, type FileColumn } from "@/app/lib/columnMapping";
 
-const VALUE_TYPE_KEYS = ["numeric", "text", "boolean", "date"] as const;
 
 /** Triggers a real browser "save to disk" for an in-memory blob — the Dataverse
  * step's "download only" action, same as the standalone Dataverse browser. */
@@ -231,6 +233,9 @@ function ColumnCheckbox({
       {column.required && (
         <span className="text-xs text-red-500 ml-1">({t("required")})</span>
       )}
+      {!column.required && column.required_one_of === "location" && (
+        <span className="ml-1 text-xs text-amber-600">({t("requiredLocation")})</span>
+      )}
     </label>
   );
 }
@@ -254,7 +259,15 @@ function StepMetadata({
   onContinue,
   draftRestored,
   onDiscardDraft,
+  target,
+  targetLoading,
+  targetError,
+  onPickTarget,
 }: {
+  target: UploadTarget | null;
+  targetLoading: boolean;
+  targetError: string | null;
+  onPickTarget: (item: DatasetCatalogueItem | null) => void;
   ficha: FichaState;
   onFichaChange: (f: FichaState) => void;
   authorized: string[];
@@ -267,14 +280,17 @@ function StepMetadata({
   onDiscardDraft: () => void;
 }) {
   const t = useTranslations("upload.template");
-  const ti = useTranslations("upload.intro");
   const tf = useTranslations("upload.ficha");
+  const tt = useTranslations("upload.target");
   const td = useTranslations("datasets");
-  const missing = fichaMissing(ficha);
+  const missing = fichaMissing(ficha, keywords);
+  // New dataset or one that exists: the form only makes sense once that is settled.
+  const [mode, setMode] = useState<"new" | "existing">(target ? "existing" : "new");
+  const choosing = mode === "existing" && !target;
 
   return (
     <div className="space-y-6">
-      {draftRestored ? (
+      {draftRestored && mode === "new" ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <span>{tf("draftRestored")}</span>
           <button type="button" onClick={onDiscardDraft} className="font-medium underline underline-offset-2 hover:text-amber-950">
@@ -283,24 +299,22 @@ function StepMetadata({
         </div>
       ) : null}
 
-      {/* What is about to happen, before a single field: the people who got lost here did
-          not know what the form was for or that someone reviews it afterwards. */}
-      <div className="flex items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-5">
-        <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" aria-hidden />
-        <div>
-          <h2 className="text-base font-semibold text-gray-900">{ti("title")}</h2>
-          <p className="mt-1 text-sm text-gray-700">
-            {ti.rich("body", { b: (chunks) => <strong className="font-semibold">{chunks}</strong> })}
-          </p>
-          <p className="mt-2 flex items-center gap-1.5 text-sm text-gray-600">
-            <FileText className="h-4 w-4 shrink-0" aria-hidden />
-            {ti("bring")}
-          </p>
-        </div>
-      </div>
+      <DatasetTarget
+        mode={mode}
+        onModeChange={(m) => {
+          setMode(m);
+          // Back to "new": forget the dataset that was loaded, with its description.
+          if (m === "new" && target) onPickTarget(null);
+        }}
+        target={target}
+        loading={targetLoading}
+        error={targetError}
+        onPick={onPickTarget}
+      />
 
       {/* Shortcut for data already published on Dataverse: prefills this form. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3">
+      {mode === "new" ? (
+      <div data-tour="up-dataverse" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-brand-900">{t("dataverseTitle")}</p>
           <p className="text-sm text-gray-700">{t("dataverseBody")}</p>
@@ -314,22 +328,29 @@ function StepMetadata({
           {t("dataverseButton")}
         </button>
       </div>
+      ) : null}
 
-      <DatasetFicha
-        value={ficha}
-        onChange={onFichaChange}
-        authorized={authorized}
-        onAuthorizedChange={onAuthorizedChange}
-        keywords={keywords}
-        onKeywordsChange={onKeywordsChange}
-      />
+      {choosing ? null : (
+      <div data-tour="up-form">
+        <DatasetFicha
+          value={ficha}
+          onChange={onFichaChange}
+          authorized={authorized}
+          onAuthorizedChange={onAuthorizedChange}
+          keywords={keywords}
+          onKeywordsChange={onKeywordsChange}
+        />
+      </div>
+      )}
 
       {/* Stays in view while the long form scrolls: always one click from the way forward,
           and always says what is still missing instead of just being greyed out. */}
-      <div className="sticky bottom-3 z-10 rounded-2xl border border-gray-200 bg-white/95 px-5 py-3 shadow-lg backdrop-blur">
+      <div data-tour="up-continue" className="sticky bottom-20 z-10 rounded-2xl border border-gray-200 bg-white/95 px-5 py-3 shadow-lg backdrop-blur sm:bottom-3 sm:pr-36">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 text-sm">
-            {missing.length > 0 ? (
+            {choosing ? (
+              <p className="text-gray-700">{tt("pickFirst")}</p>
+            ) : missing.length > 0 ? (
               <p className="text-gray-700">
                 <span className="font-medium">{tf("missingLabel")}</span>{" "}
                 {missing.map((key) => td(`fields.${key}`)).join(", ")}
@@ -344,7 +365,7 @@ function StepMetadata({
           </div>
           <button
             type="button"
-            disabled={missing.length > 0}
+            disabled={choosing || missing.length > 0}
             onClick={onContinue}
             className="inline-flex items-center gap-2 rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
           >
@@ -353,6 +374,167 @@ function StepMetadata({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The dataset an upload adds data to (null = it creates a new one). */
+export type UploadTarget = { project_id: number; code: string; name: string; version: string | null };
+
+/**
+ * First question of the wizard: is this a new dataset or more data for one that is
+ * already in the platform? In the second case its description is loaded, so nobody
+ * retypes what the platform already knows.
+ */
+function DatasetTarget({
+  mode,
+  onModeChange,
+  target,
+  loading,
+  error,
+  onPick,
+}: {
+  mode: "new" | "existing";
+  onModeChange: (m: "new" | "existing") => void;
+  target: UploadTarget | null;
+  loading: boolean;
+  error: string | null;
+  onPick: (item: DatasetCatalogueItem | null) => void;
+}) {
+  const t = useTranslations("upload.target");
+  const [items, setItems] = useState<DatasetCatalogueItem[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (mode !== "existing" || items || loadFailed) return;
+    datasetService
+      .getCatalogue()
+      .then(setItems)
+      .catch(() => setLoadFailed(true));
+  }, [mode, items, loadFailed]);
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (items ?? [])
+      .filter((i) => !q || [i.title, i.name, i.code, i.data_source].some((x) => (x ?? "").toLowerCase().includes(q)))
+      .slice(0, 8);
+  }, [items, query]);
+
+  const options: { key: "new" | "existing"; title: string; hint: string }[] = [
+    { key: "new", title: t("newOption"), hint: t("newHint") },
+    { key: "existing", title: t("existingOption"), hint: t("existingHint") },
+  ];
+
+  return (
+    <section data-tour="up-target" className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <h3 className="text-base font-semibold text-gray-900">{t("title")}</h3>
+      <div role="radiogroup" aria-label={t("title")} className="mt-3 grid gap-3 sm:grid-cols-2">
+        {options.map((o) => (
+          <button
+            key={o.key}
+            type="button"
+            role="radio"
+            aria-checked={mode === o.key}
+            onClick={() => onModeChange(o.key)}
+            className={`rounded-xl border p-4 text-left transition-colors ${
+              mode === o.key ? "border-brand-500 bg-brand-50" : "border-gray-200 hover:bg-gray-50"
+            }`}
+          >
+            <span className="block text-sm font-semibold text-gray-900">{o.title}</span>
+            <span className="mt-0.5 block text-xs text-gray-600">{o.hint}</span>
+          </button>
+        ))}
+      </div>
+
+      {mode === "existing" ? (
+        <div className="mt-4">
+          {target ? (
+            <div className="rounded-xl border border-brand-200 bg-brand-50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-wide text-brand-800">{t("selected")}</p>
+                  <p className="truncate text-sm font-semibold text-gray-900">{target.name}</p>
+                  <p className="font-mono text-[11px] text-gray-600">{target.code}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onPick(null)}
+                  className="rounded-lg border border-brand-300 bg-white px-3 py-1.5 text-xs font-medium text-brand-800 hover:bg-brand-100"
+                >
+                  {t("change")}
+                </button>
+              </div>
+              <p className="mt-3 text-sm text-gray-700">
+                {target.version ? t("versionHint", { version: target.version }) : t("noVersionHint")}
+              </p>
+              <p className="mt-1 text-xs text-gray-600">{t("reviewNote")}</p>
+            </div>
+          ) : loading ? (
+            <p className="flex items-center gap-2 text-sm text-gray-600">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> {t("loadingDescription")}
+            </p>
+          ) : (
+            <div>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" aria-hidden />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t("searchPlaceholder")}
+                  aria-label={t("searchPlaceholder")}
+                  className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-sm outline-none focus:border-brand-400 focus:bg-white"
+                />
+              </div>
+              {loadFailed ? (
+                <p className="mt-2 text-sm text-red-600">{t("loadError")}</p>
+              ) : items === null ? (
+                <p className="mt-2 flex items-center gap-2 text-sm text-gray-500">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> {t("loadingList")}
+                </p>
+              ) : matches.length === 0 ? (
+                <p className="mt-2 text-sm text-gray-500">{t("noMatch")}</p>
+              ) : (
+                <ul className="mt-2 divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200">
+                  {matches.map((i) => (
+                    <li key={i.project_id}>
+                      <button
+                        type="button"
+                        onClick={() => onPick(i)}
+                        className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+                      >
+                        <span className="block text-sm font-medium text-gray-900">{i.title || i.name}</span>
+                        <span className="block text-xs text-gray-500">
+                          <span className="font-mono">{i.code}</span>
+                          {i.data_source ? ` · ${i.data_source}` : ""}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** Reminder, on the steps after the form, of where this upload is going. */
+function TargetBanner({ target }: { target: UploadTarget }) {
+  const t = useTranslations("upload.target");
+  return (
+    <div className="mb-4 flex items-start gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
+      <Database className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" aria-hidden />
+      <p className="text-sm text-gray-800">
+        {t.rich("banner", {
+          name: target.name,
+          code: target.code,
+          b: (chunks) => <strong className="font-semibold">{chunks}</strong>,
+        })}
+      </p>
     </div>
   );
 }
@@ -368,7 +550,6 @@ function StepPlantilla({
   totalColumns,
   onDownload,
   onNext,
-  onOwnHeaders,
   onNewVariable,
   canManageCatalog,
   allSelected,
@@ -382,7 +563,6 @@ function StepPlantilla({
   totalColumns: number;
   onDownload: () => void;
   onNext: () => void;
-  onOwnHeaders: () => void;
   onNewVariable: () => void;
   canManageCatalog: boolean;
   allSelected: boolean;
@@ -449,7 +629,7 @@ function StepPlantilla({
 
         {/* Anyone arriving with a filled template should not have to scroll past
             the whole column picker to find the way out of this step. */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 p-4">
+        <div data-tour="up-skip" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 p-4">
           <div>
             <p className="text-sm font-medium text-brand-900">{t("skipTitle")}</p>
             <p className="text-sm text-brand-900/80">{t("skipBody")}</p>
@@ -464,26 +644,10 @@ function StepPlantilla({
           </button>
         </div>
 
-        {/* For files that don't use our column headers at all — map them instead
-            of renaming the file by hand. */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
-          <div>
-            <p className="text-sm font-medium text-gray-800">{t("ownHeadersTitle")}</p>
-            <p className="text-sm text-gray-500">{t("ownHeadersBody")}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onOwnHeaders}
-            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
-          >
-            <ArrowRightLeft className="h-4 w-4" />
-            {t("ownHeadersButton")}
-          </button>
-        </div>
       </div>
 
       {/* Columns selector */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div data-tour="up-columns" className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h3 className="text-base font-semibold text-gray-900">{t("columnsTitle")}</h3>
           <div className="flex items-center gap-2">
@@ -570,7 +734,7 @@ function StepPlantilla({
       </div>
 
       {/* Footer bar */}
-      <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm">
+      <div data-tour="up-download" className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-6 py-4 shadow-sm">
         <div>
           <p className="text-sm font-medium text-gray-700">{t("selectedColumns")}</p>
           <p className="text-sm text-gray-500">
@@ -597,8 +761,8 @@ function StepPlantilla({
 function StepCargar({
   file,
   onFile,
-  ownHeaders,
-  onToggleOwnHeaders,
+  fileKind,
+  inspecting,
   headerRow,
   onHeaderRowChange,
   onValidate,
@@ -610,8 +774,9 @@ function StepCargar({
 }: {
   file: File | null;
   onFile: (file: File) => void;
-  ownHeaders: boolean;
-  onToggleOwnHeaders: (value: boolean) => void;
+  /** What the file turned out to be once read: the platform's template, or something else. */
+  fileKind: "template" | "other" | null;
+  inspecting: boolean;
   headerRow: number;
   onHeaderRowChange: (value: number) => void;
   onValidate: () => void;
@@ -624,7 +789,8 @@ function StepCargar({
   const t = useTranslations("upload.file");
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const busy = validating || parsing;
+  const busy = validating || parsing || inspecting;
+  const ownHeaders = fileKind === "other";
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -649,6 +815,7 @@ function StepCargar({
 
         {/* Drop zone */}
         <div
+          data-tour="up-dropzone"
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
@@ -692,33 +859,34 @@ function StepCargar({
           )}
         </div>
 
-        {/* Column-mapping opt-in: for files that don't already use our headers
-            (also reachable straight from here for the "ya tengo la plantilla"
-            shortcut, which skips Step 1 entirely). */}
-        <div className="mt-4 flex items-start gap-2 rounded-xl border border-gray-200 bg-gray-50 p-4">
-          <input
-            id="own-headers-toggle"
-            type="checkbox"
-            checked={ownHeaders}
-            onChange={(e) => onToggleOwnHeaders(e.target.checked)}
-            className="mt-0.5 accent-brand-700"
-          />
-          <label htmlFor="own-headers-toggle" className="cursor-pointer text-sm text-gray-700">
-            {t("ownHeadersToggle")}
-          </label>
-        </div>
-
-        <div className="mt-4 sm:max-w-xs">
-          <label className="mb-1 block text-sm font-medium text-gray-700">{t("headerRowLabel")}</label>
-          <input
-            type="number"
-            min={1}
-            value={headerRow}
-            onChange={(e) => onHeaderRowChange(Math.max(1, Number(e.target.value) || 1))}
-            className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm outline-none focus:border-brand-400 focus:bg-white"
-          />
-          <p className="mt-1 text-xs text-gray-400">{t("headerRowHint")}</p>
-        </div>
+        {/* No question to answer: the file is read as soon as it is chosen, and if it is not the
+            platform's template the columns are matched in the next step. The row of headers only
+            matters then (a template carries its own hidden row of ids). */}
+        {file && fileKind === "template" ? (
+          <p className="mt-4 flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 p-4 text-sm text-brand-900">
+            <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" aria-hidden />
+            {t("detectedTemplate")}
+          </p>
+        ) : null}
+        {file && fileKind === "other" ? (
+          <div className="mt-4 space-y-4">
+            <p className="flex items-start gap-2 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" aria-hidden />
+              {t("detectedOther")}
+            </p>
+            <div className="sm:max-w-xs">
+              <label className="mb-1 block text-sm font-medium text-gray-700">{t("headerRowLabel")}</label>
+              <input
+                type="number"
+                min={1}
+                value={headerRow}
+                onChange={(e) => onHeaderRowChange(Math.max(1, Number(e.target.value) || 1))}
+                className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm outline-none focus:border-brand-400 focus:bg-white"
+              />
+              <p className="mt-1 text-xs text-gray-400">{t("headerRowHint")}</p>
+            </div>
+          </div>
+        ) : null}
 
         {(error || parseError) && (
           <div className="mt-4 flex items-start gap-2 text-sm text-red-600">
@@ -728,14 +896,14 @@ function StepCargar({
         )}
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end" data-tour="up-next">
         <button
           disabled={!file || busy}
           onClick={ownHeaders ? onContinueToMapping : onValidate}
           className="inline-flex items-center gap-2 rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-          {parsing ? t("parsingFile") : validating ? t("validating") : ownHeaders ? t("mapColumns") : t("validateContinue")}
+          {parsing || inspecting ? t("parsingFile") : validating ? t("validating") : ownHeaders ? t("mapColumns") : t("validateContinue")}
         </button>
       </div>
     </div>
@@ -847,8 +1015,14 @@ function StepMapear({
   );
   const hasDuplicates = useMemo(() => Array.from(targetCounts.values()).some((n) => n > 1), [targetCounts]);
   const mappedCount = mappedTargets.size;
+  // A site needs its coordinates OR its admin 1 + admin 2.
+  const locationMissing = useMemo(() => {
+    if (!allColumns.some((c) => c.required_one_of === "location")) return false;
+    const has = (id: string) => mappedTargets.has(id);
+    return !((has("latitude") && has("longitude")) || (has("admin_1") && has("admin_2")));
+  }, [allColumns, mappedTargets]);
 
-  const canContinue = mappedCount > 0 && !hasDuplicates && missingRequired.length === 0 && !validating;
+  const canContinue = mappedCount > 0 && !hasDuplicates && missingRequired.length === 0 && !locationMissing && !validating;
 
   return (
     <div className="space-y-6">
@@ -887,6 +1061,12 @@ function StepMapear({
           <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             {t("missingRequired", { fields: missingRequired.map(columnLabel).join(", ") })}
+          </div>
+        )}
+        {locationMissing && (
+          <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            {t("missingLocation")}
           </div>
         )}
         {mappedCount === 0 && (
@@ -1112,16 +1292,16 @@ const FICHA_FIELDS = [
   "related_datasets", "subject", "language",
   "temporal_coverage_start", "temporal_coverage_end", "spatial_coverage", "spatial_data_type",
   "geographic_bounding_box",
-  "expected_matrices", "expected_variables", "sampling_design",
+  "sampling_type", "expected_matrices", "expected_variables", "sampling_design",
   "access_level", "authorized_users", "embargo_until", "license", "access_conditions",
-  "data_source", "funding_information", "provenance", "methodology", "citation", "usage_notes",
+  "data_source", "research_group", "funding_information", "provenance", "methodology", "citation", "usage_notes",
   "contact_name", "contact_email", "contact_name_2", "contact_email_2",
 ];
 
 const FICHA_TEXTAREAS = new Set(["abstract", "spatial_coverage", "sampling_design", "expected_variables", "access_conditions", "provenance", "methodology", "citation", "usage_notes", "funding_information"]);
 const FICHA_DATES = new Set(["temporal_coverage_start", "temporal_coverage_end", "embargo_until"]);
 /** Comma-separated in the form, sent as arrays. */
-const FICHA_LISTS = new Set(["keywords", "expected_matrices", "related_publications", "authors", "related_datasets"]);
+const FICHA_LISTS = new Set(["keywords", "expected_matrices", "related_publications", "authors", "related_datasets", "sampling_type"]);
 /** Derived from the uploaded file; editable, but prefilled so nobody retypes them. */
 const FICHA_AUTOFILLED = new Set(["expected_matrices", "expected_variables"]);
 /**
@@ -1144,12 +1324,23 @@ const DATAVERSE_SUBJECTS = [
   "Earth and Environmental Sciences", "Engineering", "Law", "Mathematical Sciences",
   "Medicine, Health and Life Sciences", "Physics", "Social Sciences", "Other",
 ];
-/** Without these a published dataset cannot be found, cited or asked about. */
-const FICHA_REQUIRED = ["title", "abstract", "contact_email", "access_level"] as const;
+/**
+ * Without these a published dataset cannot be found, cited, credited or asked
+ * about. They are spread across the form's sections on purpose: a section that
+ * holds a required field cannot be skipped, so every part of the ficha gets looked at.
+ * `keywords` lives in its own state (AGROVOC terms), not in the flat ficha strings.
+ */
+const FICHA_REQUIRED = [
+  "title", "abstract", "contact_email", "access_level",
+  "authors", "keywords", "temporal_coverage_start", "temporal_coverage_end",
+  "data_source", "sampling_type",
+] as const;
 
 /** Only three levels are used in practice; the API still accepts legacy values. */
 const FICHA_ACCESS_LEVELS: AccessLevel[] = ["PUBLIC", "RESTRICTED", "PRIVATE"];
-const SPATIAL_DATA_TYPES = ["POINT", "LINE", "POLYGON", "RASTER"];
+const SPATIAL_DATA_TYPES = ["POINT", "LINE", "POLYGON"];
+/** How the soil was sampled — stored as these codes, shown with translated labels. */
+const SAMPLING_TYPES = ["FARM_COMPOSITE", "SINGLE_POINT"];
 
 /**
  * CGIAR Research Centers, for the "source / organization" suggestions. Offered
@@ -1172,11 +1363,8 @@ const CGIAR_CENTERS = [
   "WorldFish",
 ];
 
-/** Common data licenses, offered as suggestions (free text is still accepted). */
-const LICENSES = ["CC0-1.0", "CC-BY-4.0", "CC-BY-SA-4.0", "CC-BY-NC-4.0", "CC-BY-NC-SA-4.0", "ODbL-1.0"];
-
 /** Fields whose input offers a list of suggestions: tell the user how to see it. */
-const SUGGESTED_FIELDS = new Set(["data_source", "subject", "license"]);
+const SUGGESTED_FIELDS = new Set(["data_source", "subject"]);
 
 export type FichaState = Record<string, string>;
 
@@ -1186,8 +1374,8 @@ export type FichaState = Record<string, string>;
  */
 export const EMPTY_FICHA: FichaState = Object.fromEntries(FICHA_FIELDS.map((f) => [f, ""])) as FichaState;
 
-export const fichaMissing = (f: FichaState): string[] =>
-  FICHA_REQUIRED.filter((k) => !(f[k] ?? "").trim());
+export const fichaMissing = (f: FichaState, keywords: AgrovocTerm[] = []): string[] =>
+  FICHA_REQUIRED.filter((k) => (k === "keywords" ? keywords.length === 0 : !(f[k] ?? "").trim()));
 
 /** Flat string form -> API payload (lists split, blanks nulled). */
 export const fichaPayload = (
@@ -1211,6 +1399,42 @@ export const fichaPayload = (
     } else {
       out[field] = raw === "" ? null : raw;
     }
+  }
+  return out;
+};
+
+/**
+ * An existing dataset's stored ficha as the form's flat strings, so adding data to it
+ * starts from what it already says instead of an empty form. Lists go back the way
+ * `fichaPayload` splits them (authors one per line, the rest comma-separated).
+ */
+export const fichaFromMetadata = (
+  meta: ProjectMetadata | null,
+): { ficha: FichaState; authorized: string[]; keywords: AgrovocTerm[] } => {
+  const ficha: FichaState = { ...EMPTY_FICHA };
+  if (!meta) return { ficha, authorized: [], keywords: [] };
+  const stored = meta as unknown as Record<string, unknown>;
+  for (const field of FICHA_FIELDS) {
+    if (field === "keywords" || field === "authorized_users") continue;
+    const v = stored[field];
+    if (v === null || v === undefined) continue;
+    ficha[field] = Array.isArray(v) ? v.join(field === "authors" ? "\n" : ", ") : String(v);
+  }
+  return { ficha, authorized: meta.authorized_users ?? [], keywords: toTerms(meta.keywords) };
+};
+
+/**
+ * Only what differs from the ficha the dataset already had. Sending the whole form
+ * would rewrite fields nobody touched (and could undo an edit made meanwhile elsewhere).
+ */
+export const fichaChanges = (
+  current: Record<string, unknown>,
+  baseline: Record<string, unknown> | null,
+): Record<string, unknown> => {
+  if (!baseline) return current;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(current)) {
+    if (JSON.stringify(value ?? null) !== JSON.stringify(baseline[key] ?? null)) out[key] = value;
   }
   return out;
 };
@@ -1447,9 +1671,9 @@ const FICHA_ESSENTIAL = ["title", "abstract", "contact_name", "contact_email", "
 const FICHA_GROUPS: { key: string; fields: string[] }[] = [
   { key: "authorship", fields: ["authors", "version", "persistent_id", "citation", "related_publications", "related_datasets"] },
   { key: "coverage", fields: ["keywords", "subject", "language", "temporal_coverage_start", "temporal_coverage_end", "spatial_coverage", "spatial_data_type", "geographic_bounding_box"] },
-  { key: "content", fields: ["expected_matrices", "expected_variables", "sampling_design"] },
+  { key: "content", fields: ["sampling_type", "expected_matrices", "expected_variables", "sampling_design"] },
   { key: "reuse", fields: ["license", "embargo_until", "access_conditions", "usage_notes"] },
-  { key: "origin", fields: ["data_source", "funding_information", "provenance", "methodology"] },
+  { key: "origin", fields: ["data_source", "research_group", "funding_information", "provenance", "methodology"] },
   { key: "contact2", fields: ["contact_name_2", "contact_email_2"] },
 ];
 
@@ -1472,9 +1696,13 @@ function DatasetFicha({
   // Field labels already exist for the dataset catalogue - reuse them so both
   // screens always name the same field the same way.
   const td = useTranslations("datasets");
-  const missing = fichaMissing(value);
+  const missing = fichaMissing(value, keywords);
   const set = (k: string, v: string) => onChange({ ...value, [k]: v });
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  // Every section starts open, so the whole form can be read top to bottom; closing one is the
+  // person's own choice and is kept.
+  const [closedGroups, setClosedGroups] = useState<Record<string, boolean>>({});
+
+  const isRequiredField = (field: string) => (FICHA_REQUIRED as readonly string[]).includes(field);
 
   const isFilled = (field: string) =>
     field === "keywords"
@@ -1482,20 +1710,6 @@ function DatasetFicha({
       : field === "authorized_users"
       ? authorized.length > 0
       : (value[field] ?? "").trim() !== "";
-
-  // A group that already holds something opens by itself, once. After that the
-  // person's own open/close wins, and a group never closes under the field being typed in.
-  const filledSignature = FICHA_GROUPS.map((g) => (g.fields.some(isFilled) ? "1" : "0")).join("");
-  useEffect(() => {
-    setOpenGroups((prev) => {
-      let next = prev;
-      for (const g of FICHA_GROUPS) {
-        if (!(g.key in next) && g.fields.some(isFilled)) next = { ...next, [g.key]: true };
-      }
-      return next;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filledSignature]);
 
   // The allow-list only means something for a RESTRICTED dataset: a public one
   // needs no permissions, and a private one is the owner's alone.
@@ -1505,7 +1719,7 @@ function DatasetFicha({
     const wide = FICHA_TEXTAREAS.has(field) || field === "title" || field === "authorized_users" || FICHA_LISTS.has(field);
     const help = t.has(`help.${field}`) ? t(`help.${field}`) : null;
     const placeholder = t.has(`placeholder.${field}`) ? t(`placeholder.${field}`) : "";
-    const isRequired = (FICHA_REQUIRED as readonly string[]).includes(field);
+    const isRequired = isRequiredField(field);
     return (
       <label key={field} className={`block ${wide ? "sm:col-span-2" : ""}`}>
         <span className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-600">
@@ -1552,6 +1766,27 @@ function DatasetFicha({
               <option key={g} value={g}>{t(`spatialTypes.${g}`)}</option>
             ))}
           </select>
+        ) : field === "sampling_type" ? (
+          // Both can apply to one dataset, so these are checkboxes, not a single choice.
+          <div className="space-y-1.5 pt-1">
+            {SAMPLING_TYPES.map((g) => {
+              const chosen = (value.sampling_type ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+              const checked = chosen.includes(g);
+              return (
+                <label key={g} className="flex items-center gap-2 text-sm text-gray-800">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() =>
+                      set("sampling_type", SAMPLING_TYPES.filter((x) => (x === g ? !checked : chosen.includes(x))).join(","))
+                    }
+                    className="accent-brand-700"
+                  />
+                  {t(`samplingTypes.${g}`)}
+                </label>
+              );
+            })}
+          </div>
         ) : field === "data_source" ? (
           <>
             <input
@@ -1568,20 +1803,7 @@ function DatasetFicha({
             </datalist>
           </>
         ) : field === "license" ? (
-          <>
-            <input
-              list="data-licenses"
-              value={value.license ?? ""}
-              onChange={(e) => set("license", e.target.value)}
-              placeholder={placeholder}
-              className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm outline-none focus:border-brand-400 focus:bg-white"
-            />
-            <datalist id="data-licenses">
-              {LICENSES.map((l) => (
-                <option key={l} value={l} />
-              ))}
-            </datalist>
-          </>
+          <LicenseSelect value={value.license ?? ""} onChange={(v) => set("license", v)} />
         ) : field === "subject" ? (
           <>
             <input
@@ -1619,7 +1841,7 @@ function DatasetFicha({
           <span className="mt-0.5 block text-[10px] text-gray-400">{t("suggestionsHint")}</span>
         ) : null}
 
-        {FICHA_LISTS.has(field) && field !== "keywords" && field !== "authors" ? (
+        {FICHA_LISTS.has(field) && field !== "keywords" && field !== "authors" && field !== "sampling_type" ? (
           <span className="mt-0.5 block text-[10px] text-gray-400">{td("fields.listHint")}</span>
         ) : null}
       </label>
@@ -1659,13 +1881,14 @@ function DatasetFicha({
           {FICHA_GROUPS.map((group) => {
             const fields = group.fields.filter(isVisible);
             const filled = fields.filter(isFilled).length;
-            const open = openGroups[group.key] ?? false;
+            const pending = fields.filter((f) => isRequiredField(f) && missing.includes(f)).length;
+            const open = !closedGroups[group.key];
             return (
               <div key={group.key} className="rounded-2xl border border-gray-200 bg-white shadow-sm">
                 <button
                   type="button"
                   aria-expanded={open}
-                  onClick={() => setOpenGroups((s) => ({ ...s, [group.key]: !open }))}
+                  onClick={() => setClosedGroups((s) => ({ ...s, [group.key]: open }))}
                   className="flex w-full items-start gap-3 p-4 text-left"
                 >
                   <ChevronDown className={`mt-0.5 h-4 w-4 shrink-0 text-gray-400 transition-transform ${open ? "" : "-rotate-90"}`} aria-hidden />
@@ -1673,8 +1896,13 @@ function DatasetFicha({
                     <h4 className="text-sm font-semibold text-gray-900">{t(`groups.${group.key}.title`)}</h4>
                     <p className="text-xs text-gray-500">{t(`groups.${group.key}.description`)}</p>
                   </div>
-                  <span className={`shrink-0 text-xs ${filled > 0 ? "font-medium text-brand-700" : "text-gray-400"}`}>
-                    {t("filledCount", { filled, total: fields.length })}
+                  <span className="shrink-0 text-right text-xs">
+                    {pending > 0 ? (
+                      <span className="block font-medium text-red-600">{t("requiredPending", { n: pending })}</span>
+                    ) : null}
+                    <span className={filled > 0 ? "font-medium text-brand-700" : "text-gray-400"}>
+                      {t("filledCount", { filled, total: fields.length })}
+                    </span>
                   </span>
                 </button>
                 {open ? <div className="grid gap-4 border-t border-gray-100 p-5 sm:grid-cols-2">{fields.map(renderField)}</div> : null}
@@ -1703,6 +1931,7 @@ function StepValidacion({
   onImport: () => void;
 }) {
   const t = useTranslations("upload.validation");
+  const tu = useTranslations("upload");
   const hasErrors = result.error_count > 0;
   const hasWarnings = result.warning_count > 0;
 
@@ -1723,7 +1952,7 @@ function StepValidacion({
   // keep a sample value and the first row numbers so the user can go find them.
   const issueGroups = useMemo(() => {
     const map = new Map<string, {
-      key: string; column?: string | null; message: string;
+      key: string; column?: string | null; columnLabel?: string | null; message: string;
       severity: string; count: number; rows: number[]; sampleValue?: string | null; sheet?: string | null;
     }>();
     for (const issue of result.issues) {
@@ -1736,6 +1965,8 @@ function StepValidacion({
         map.set(key, {
           key,
           column: issue.column,
+          // our own translation of the structural columns, the API's name for the rest (variables)
+          columnLabel: tu.has(`columnLabels.${issue.column}`) ? tu(`columnLabels.${issue.column}`) : issue.column_label,
           message: issueText(issue.code, issue.column, issue.message),
           severity: issue.severity,
           count: 1,
@@ -1749,7 +1980,7 @@ function StepValidacion({
     return [...map.values()].sort(
       (a, b) => (a.severity === b.severity ? b.count - a.count : a.severity === "error" ? -1 : 1),
     );
-  }, [result.issues, issueText]);
+  }, [result.issues, issueText, tu]);
 
   if (importResult) {
     const inserted = importResult.inserted;
@@ -1800,7 +2031,7 @@ function StepValidacion({
   return (
     <div className="space-y-6">
       {/* Summary */}
-      <div className={`rounded-2xl border p-6 shadow-sm ${hasErrors ? "border-red-200 bg-red-50" : hasWarnings ? "border-yellow-200 bg-yellow-50" : "border-brand-200 bg-brand-50"}`}>
+      <div data-tour="up-summary" className={`rounded-2xl border p-6 shadow-sm ${hasErrors ? "border-red-200 bg-red-50" : hasWarnings ? "border-yellow-200 bg-yellow-50" : "border-brand-200 bg-brand-50"}`}>
         <div className="flex items-start gap-3">
           {hasErrors ? (
             <XCircle className="h-5 w-5 text-red-500 mt-0.5" />
@@ -1842,7 +2073,7 @@ function StepValidacion({
       {/* Issues, grouped: one row per problem type, not per cell. A 500-row file
           with one bad column produced 500 identical lines, which nobody reads. */}
       {issueGroups.length > 0 && (
-        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div data-tour="up-issues" className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100">
             <h3 className="text-base font-semibold text-gray-900">{t("issuesDetail")}</h3>
             <p className="mt-0.5 text-sm text-gray-500">{t("issuesGroupedHint")}</p>
@@ -1858,7 +2089,13 @@ function StepValidacion({
                   >
                     {g.severity === "error" ? t("error") : t("warning")}
                   </span>
-                  <span className="font-mono text-sm text-gray-800">{g.column ?? "—"}</span>
+                  {g.columnLabel ? (
+                    <span className="text-sm font-semibold text-gray-900" title={g.column ?? undefined}>
+                      {g.columnLabel}
+                    </span>
+                  ) : (
+                    <span className="font-mono text-sm text-gray-800">{g.column ?? "—"}</span>
+                  )}
                   {/* Only data rows count as "affected": a problem with a column, the file
                       or another sheet is not a number of rows. */}
                   {!g.sheet && g.rows[0] > 0 ? (
@@ -1913,6 +2150,7 @@ function StepValidacion({
           {t("backToUpload")}
         </button>
         <button
+          data-tour="up-import"
           disabled={hasErrors || importing}
           onClick={onImport}
           className="inline-flex items-center gap-2 rounded-xl bg-brand-700 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -1920,218 +2158,6 @@ function StepValidacion({
           {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           {importing ? t("importing") : t("importData")}
         </button>
-      </div>
-    </div>
-  );
-}
-
-// ── New variable modal ────────────────────────────────────────────────────────
-
-function NewVariableModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: (variableId: number, name: string) => void;
-}) {
-  const t = useTranslations("upload.newVariable");
-  const tv = useTranslations("upload.valueTypes");
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [codeEdited, setCodeEdited] = useState(false);
-  const [valueType, setValueType] = useState("numeric");
-  const [matrix, setMatrix] = useState("");
-  const [unitId, setUnitId] = useState("");
-  const [domain, setDomain] = useState("");
-  const [units, setUnits] = useState<FilterOption[]>([]);
-  const [domains, setDomains] = useState<string[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    Promise.allSettled([variablesService.getUnits(), variablesService.getDomains()]).then(
-      ([unitsResult, domainsResult]) => {
-        if (!active) return;
-        if (unitsResult.status === "fulfilled") setUnits(unitsResult.value);
-        if (domainsResult.status === "fulfilled") setDomains(domainsResult.value);
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const handleNameChange = (value: string) => {
-    setName(value);
-    if (!codeEdited) setCode(normalizeCode(value));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const finalCode = normalizeCode(code || name);
-    if (!name.trim() || !finalCode) {
-      setError(t("nameRequired"));
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      const variable = await variablesService.create({
-        variable_code: finalCode,
-        name: name.trim(),
-        domain: domain.trim() || "CUSTOM",
-        value_type: valueType,
-        matrix: matrix || null,
-        default_unit_id: unitId ? Number(unitId) : null,
-      });
-      onCreated(variable.id, variable.name ?? "");
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : err instanceof Error
-          ? err.message
-          : t("createError"),
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-start justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">{t("title")}</h3>
-            <p className="text-sm text-gray-500">{t("subtitle")}</p>
-          </div>
-          <button onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">{t("name")}</label>
-            <input
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              placeholder={t("namePlaceholder")}
-              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              autoFocus
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">{t("code")}</label>
-            <input
-              value={code}
-              onChange={(e) => {
-                setCode(e.target.value);
-                setCodeEdited(true);
-              }}
-              placeholder="BORO_DISPONIBLE"
-              className="w-full rounded-xl border border-gray-200 px-3 py-2 font-mono text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
-            <p className="mt-1 text-xs text-gray-400">{t("codeHint")}</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">{t("valueType")}</label>
-              <select
-                value={valueType}
-                onChange={(e) => setValueType(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              >
-                {VALUE_TYPE_KEYS.map((key) => (
-                  <option key={key} value={key}>
-                    {tv(key)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">{t("matrix")}</label>
-              <select
-                value={matrix}
-                onChange={(e) => setMatrix(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              >
-                <option value="">—</option>
-                {MATRIX_OPTIONS.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">{t("unit")}</label>
-              <select
-                value={unitId}
-                onChange={(e) => setUnitId(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              >
-                <option value="">—</option>
-                {units.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">{t("domain")}</label>
-              <input
-                value={domain}
-                onChange={(e) => setDomain(e.target.value)}
-                list="variable-domains"
-                placeholder="CUSTOM"
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              />
-              <datalist id="variable-domains">
-                {domains.map((d) => (
-                  <option key={d} value={d} />
-                ))}
-              </datalist>
-            </div>
-          </div>
-          <p className="-mt-2 text-xs text-gray-400">{t("domainHint")}</p>
-
-          {error && (
-            <div className="flex items-start gap-2 text-sm text-red-600">
-              <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              {error}
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              {t("cancel")}
-            </button>
-            <button
-              type="submit"
-              disabled={submitting || !name.trim()}
-              className="inline-flex items-center gap-2 rounded-xl bg-brand-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-800 disabled:opacity-40"
-            >
-              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {submitting ? t("creating") : t("create")}
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );
@@ -2162,7 +2188,10 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
   const [validation, setValidation] = useState<UploadValidationResponse | null>(null);
 
   // Step 2b — mapping columns of a file that doesn't use our headers
-  const [ownHeaders, setOwnHeaders] = useState(false);
+  // What the chosen file is, found out by reading its first rows as soon as it is picked.
+  const [fileKind, setFileKind] = useState<"template" | "other" | null>(null);
+  const [inspectingFile, setInspectingFile] = useState(false);
+  const inspectToken = useRef(0);
   const [headerRow, setHeaderRow] = useState(1);
   const [parsingFile, setParsingFile] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -2192,12 +2221,38 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<UploadImportResponse | null>(null);
+
+  // First-time walkthrough: each step explains itself the first time it is reached. The mapping
+  // and Dataverse sub-steps and the finished screen have nothing to point at, so no tour there.
+  const tourStep: UploadTourStep | null =
+    mode !== "archivo"
+      ? null
+      : step === "metadata" || step === "plantilla" || step === "cargar"
+        ? step
+        : step === "validacion" && validation && !importResult
+          ? "validacion"
+          : null;
+  const [tourRun, setTourRun] = useState(0);
+  useUploadTour(tourStep, tourRun, {
+    next: t("tour.buttons.next"),
+    prev: t("tour.buttons.prev"),
+    done: t("tour.buttons.done"),
+    close: t("tour.buttons.close"),
+    text: (key) => ({ title: t(`tour.step.${key}.title`), description: t(`tour.step.${key}.description`) }),
+  });
   // Ficha FAIR del dataset, capturada aquí porque un proyecto nuevo no existe
   // en el catálogo hasta que la submission se aprueba.
   const [ficha, setFicha] = useState<FichaState>(EMPTY_FICHA);
   const [authorized, setAuthorized] = useState<string[]>([]);
   const [keywords, setKeywords] = useState<AgrovocTerm[]>([]);
   const [suggestedCols, setSuggestedCols] = useState<Set<number>>(new Set());
+
+  // Adding data to a dataset that already exists instead of creating a new one: which
+  // dataset, and the ficha it had when it was chosen (so only real edits are sent).
+  const [target, setTarget] = useState<UploadTarget | null>(null);
+  const [targetBaseline, setTargetBaseline] = useState<Record<string, unknown> | null>(null);
+  const [targetLoading, setTargetLoading] = useState(false);
+  const [targetError, setTargetError] = useState<string | null>(null);
 
   // Protect the person's work: the ficha is the longest thing they type here and a
   // reload, a lost connection or an expired session must not cost them all of it.
@@ -2221,7 +2276,7 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
   }, []);
 
   useEffect(() => {
-    if (!draftLoaded.current || importResult) return;
+    if (!draftLoaded.current || importResult || target) return;
     const empty = Object.values(ficha).every((v) => !v.trim()) && authorized.length === 0 && keywords.length === 0;
     const timer = setTimeout(() => {
       try {
@@ -2232,7 +2287,41 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [ficha, authorized, keywords, importResult]);
+  }, [ficha, authorized, keywords, importResult, target]);
+
+  /** Choose (or drop) the existing dataset this upload adds data to, loading its description. */
+  const handlePickTarget = async (item: DatasetCatalogueItem | null) => {
+    setTargetError(null);
+    if (!item) {
+      setTarget(null);
+      setTargetBaseline(null);
+      setFicha(EMPTY_FICHA);
+      setAuthorized([]);
+      setKeywords([]);
+      return;
+    }
+    setTargetLoading(true);
+    try {
+      let meta: ProjectMetadata | null = null;
+      try {
+        meta = await datasetService.getMetadata(item.project_id);
+      } catch (err) {
+        // A dataset without a description yet is fine: the form simply starts empty.
+        if (!(err instanceof ApiError && err.status === 404)) throw err;
+      }
+      const loaded = fichaFromMetadata(meta);
+      setFicha(loaded.ficha);
+      setAuthorized(loaded.authorized);
+      setKeywords(loaded.keywords);
+      setTargetBaseline(fichaPayload(loaded.ficha, loaded.authorized, loaded.keywords));
+      setDraftRestored(false);
+      setTarget({ project_id: item.project_id, code: item.code, name: item.title || item.name, version: meta?.version ?? null });
+    } catch (err) {
+      setTargetError(err instanceof Error ? err.message : t("errors.validate"));
+    } finally {
+      setTargetLoading(false);
+    }
+  };
 
   const discardDraft = () => {
     setFicha(EMPTY_FICHA);
@@ -2271,6 +2360,27 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
 
   const allColumns = useMemo(() => groups.flatMap((g) => g.columns), [groups]);
 
+  // The same fields named in the other language, so a Spanish file can be matched from the
+  // English screen (and the other way round). Only used to suggest a mapping.
+  const [otherLabels, setOtherLabels] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let active = true;
+    uploadService
+      .getTemplateColumns({ lang: locale === "es" ? "en" : "es" })
+      .then((response) => {
+        if (!active) return;
+        const labels: Record<string, string> = {};
+        for (const group of response.groups) for (const column of group.columns) labels[column.id] = column.label;
+        setOtherLabels(labels);
+      })
+      .catch(() => {
+        /* only a convenience: the mapping then falls back to this screen's language */
+      });
+    return () => {
+      active = false;
+    };
+  }, [locale]);
+
   /**
    * Load the template column catalog. On the first load required columns are
    * preselected; on a refresh (e.g. after creating a variable) the current
@@ -2285,7 +2395,7 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
       setSelected((prev) => {
         const required = response.groups
           .flatMap((g) => g.columns)
-          .filter((c) => c.required)
+          .filter((c) => c.required || c.required_one_of)
           .map((c) => c.id);
         const next = prev.size === 0 ? new Set(required) : new Set(prev);
         if (selectId) next.add(selectId);
@@ -2343,7 +2453,7 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
     setValidating(true);
     setValidateError(null);
     try {
-      const result = await uploadService.validate(file, { columns: Array.from(selected), headerRow });
+      const result = await uploadService.validate(file, { columns: Array.from(selected), headerRow, projectCode: target?.code });
       setValidation(result);
       setImportResult(null);
       setImportError(null);
@@ -2359,11 +2469,6 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
     } finally {
       setValidating(false);
     }
-  };
-
-  const handleOwnHeaders = () => {
-    setOwnHeaders(true);
-    setStep("cargar");
   };
 
   const fileKey = (f: File) => `${f.name}:${f.size}:${f.lastModified}`;
@@ -2385,9 +2490,36 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
     }
   };
 
+  /** Reads the first rows of a file to tell the platform's template from any other file. */
+  const inspectFile = async (f: File) => {
+    const token = ++inspectToken.current;
+    setInspectingFile(true);
+    try {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(await f.arrayBuffer(), { type: "array", sheetRows: 3 });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: true, defval: "" });
+      const structural = new Set(allColumns.filter((c) => !c.id.includes(":")).map((c) => c.id));
+      if (token === inspectToken.current) setFileKind(looksLikeTemplate(rows, structural) ? "template" : "other");
+    } catch {
+      // Unreadable here: let the validation say what is wrong with it.
+      if (token === inspectToken.current) setFileKind("template");
+    } finally {
+      if (token === inspectToken.current) setInspectingFile(false);
+    }
+  };
+
   const handleFileSelected = (f: File, source: "local" | "dataverse" = "local") => {
     setFile(f);
     setFileSource(source);
+    if (source === "local") {
+      setFileKind(null);
+      void inspectFile(f);
+    } else {
+      inspectToken.current += 1;
+      setInspectingFile(false);
+      setFileKind("other"); // a Dataverse file is always matched column by column
+    }
     // A genuinely different file invalidates any mapping (and validation) built for the old one.
     if (parsedFileKey !== fileKey(f)) {
       setValidation(null);
@@ -2451,7 +2583,7 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
   /** Starts the mapping from what can be matched by name, so only the rest is left to the person. */
   const applySuggestions = (columns: FileColumn[]) => {
     const labelOf = (c: TemplateColumn) => (t.has(`columnLabels.${c.id}`) ? t(`columnLabels.${c.id}`) : c.label);
-    const suggestions = suggestMapping(columns, allColumns, labelOf);
+    const suggestions = suggestMapping(columns, allColumns, labelOf, (c) => otherLabels[c.id]);
     setMapping(suggestions);
     setSuggestedCols(new Set(Object.keys(suggestions).map(Number)));
   };
@@ -2477,7 +2609,7 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
         source_header: col.header || null,
         target_id: mapping[col.index] || null,
       }));
-      const result = await uploadService.validate(file, { columnMapping, headerRow });
+      const result = await uploadService.validate(file, { columnMapping, headerRow, projectCode: target?.code });
       setValidation(result);
       setImportResult(null);
       setImportError(null);
@@ -2579,7 +2711,6 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
 
       applyDataverseFicha(dataversePreview.ficha);
 
-      setOwnHeaders(true);
       handleFileSelected(constructedFile, "dataverse");
       const columns = await parseFileToColumns(constructedFile);
       setFileColumns(columns);
@@ -2598,10 +2729,15 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
     setImporting(true);
     setImportError(null);
     try {
+      const current = fichaPayload(ficha, authorized, keywords);
+      // For an existing dataset only what was edited goes to the reviewer; the rest is
+      // already there and sending it back would just rewrite it.
+      const metadata = target ? fichaChanges(current, targetBaseline) : current;
       const result = await uploadService.commit({
         upload_id: validation.upload_id,
         ignore_warnings: true,
-        metadata: fichaPayload(ficha, authorized, keywords),
+        metadata: Object.keys(metadata).length ? (metadata as ProjectMetadataUpsert) : undefined,
+        project_code: target?.code,
       });
       setImportResult(result);
       try {
@@ -2623,15 +2759,31 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
   };
 
   return (
-    <div className="px-4 py-8 sm:px-6 lg:px-8">
+    <div className="px-4 pb-24 pt-8 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">{t("header.title")}</h1>
-        <p className="mt-1 text-sm text-gray-500">{t("header.subtitle")}</p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">{t("header.title")}</h1>
+          <p className="mt-1 text-sm text-gray-500">{t("header.subtitle")}</p>
+        </div>
+        {/* Replays the walkthrough of the step on screen (and of the others as they are reached). */}
+        {tourStep ? (
+          <button
+            type="button"
+            onClick={() => {
+              resetUploadTour();
+              setTourRun((n) => n + 1);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+          >
+            <Compass className="h-4 w-4" aria-hidden />
+            {t("tour.button")}
+          </button>
+        ) : null}
       </div>
 
       {/* Mode switch: file import vs manual registration */}
-      <div className="mb-6 flex w-fit flex-wrap gap-1 rounded-full border border-gray-200 bg-gray-50 p-1">
+      <div data-tour="up-modes" className="mb-6 flex w-fit flex-wrap gap-1 rounded-full border border-gray-200 bg-gray-50 p-1">
         {([
           { key: "archivo" as UploadMode, label: t("modes.file") },
           { key: "manual" as UploadMode, label: t("modes.manual") },
@@ -2656,10 +2808,21 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
         <ManualRegistration canManageCatalog={canManageCatalog} />
       ) : (
         <>
+          {/* What is about to happen, before a single field: the people who got lost here did
+              not know what the form was for or that someone reviews it afterwards. */}
+          {step === "metadata" ? (
+            <p className="mb-4 text-sm leading-relaxed text-gray-600">
+              {t.rich("intro.summary", { b: (chunks) => <strong className="font-semibold text-gray-800">{chunks}</strong> })}
+            </p>
+          ) : null}
+
           {/* Steps */}
-          <div className="mb-6">
+          <div className="mb-6" data-tour="up-steps">
             <StepIndicator current={step} finished={importResult !== null} onNavigate={setStep} />
           </div>
+
+          {/* Where this upload is going, once the form is behind us. */}
+          {target && step !== "metadata" ? <TargetBanner target={target} /> : null}
 
           {/* Content */}
           {step === "metadata" && (
@@ -2674,6 +2837,10 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
               onContinue={handleMetadataContinue}
               draftRestored={draftRestored}
               onDiscardDraft={discardDraft}
+              target={target}
+              targetLoading={targetLoading}
+              targetError={targetError}
+              onPickTarget={handlePickTarget}
             />
           )}
           {step === "plantilla" && (
@@ -2686,7 +2853,6 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
               totalColumns={allColumns.length}
               onDownload={handleDownloadTemplate}
               onNext={() => setStep("cargar")}
-              onOwnHeaders={handleOwnHeaders}
               onNewVariable={() => setShowNewVariable(true)}
               canManageCatalog={canManageCatalog}
               allSelected={allSelected}
@@ -2697,10 +2863,17 @@ export default function UploadView({ canManageCatalog }: { canManageCatalog: boo
             <StepCargar
               file={file}
               onFile={handleFileSelected}
-              ownHeaders={ownHeaders}
-              onToggleOwnHeaders={setOwnHeaders}
+              fileKind={fileKind}
+              inspecting={inspectingFile}
               headerRow={headerRow}
-              onHeaderRowChange={setHeaderRow}
+              onHeaderRowChange={(row) => {
+                // Another header row means other columns: whatever was read or matched before is stale.
+                setHeaderRow(row);
+                setFileColumns([]);
+                setMapping({});
+                setSuggestedCols(new Set());
+                setParsedFileKey(null);
+              }}
               onValidate={handleValidate}
               onContinueToMapping={handleContinueToMapping}
               validating={validating}

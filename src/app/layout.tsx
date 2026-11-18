@@ -6,7 +6,7 @@ import { SessionProvider } from "next-auth/react";
 import "./globals.css";
 import { SITE_TITLE } from "@/app/config";
 import { auth } from "@/auth";
-import ChatWidget from "@/app/components/ChatWidget";
+import FloatingHelp from "@/app/components/FloatingHelp";
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",
@@ -41,7 +41,7 @@ export default async function RootLayout({
         <NextIntlClientProvider>
           <SessionProvider session={session}>
             <main className="min-h-screen">{children}</main>
-            <ChatWidget />
+            <FloatingHelp />
           </SessionProvider>
         </NextIntlClientProvider>
       </body>
