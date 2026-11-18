@@ -20,6 +20,41 @@
     "signIn": "Sign in",
     "errorMessage": "Something went wrong answering that — please try again."
   },
+  "help": {
+    "launcher": "Help",
+    "close": "Close",
+    "menuLabel": "Help options"
+  },
+  "feedback": {
+    "button": "Feedback",
+    "title": "Send us feedback",
+    "close": "Close feedback",
+    "intro": "Found a problem or have an idea? Tell us — it goes straight to the team.",
+    "typeLabel": "What is it about?",
+    "types": {
+      "bug": "Something is broken",
+      "suggestion": "An idea or suggestion",
+      "question": "A question",
+      "other": "Something else"
+    },
+    "messageLabel": "Your message",
+    "messagePlaceholder": "What happened, or what would you like to see?",
+    "characters": "{count} / {max}",
+    "emailLabel": "Your email (optional)",
+    "emailHelp": "Only if you would like a reply. If you leave it empty, we won't know who wrote.",
+    "pageNote": "We also send the page you are on and your browser, to help us reproduce problems.",
+    "send": "Send feedback",
+    "sending": "Sending…",
+    "sentTitle": "Thank you!",
+    "sentBody": "Your message reached the team.",
+    "another": "Send another",
+    "errors": {
+      "tooShort": "Please write a little more (at least {min} characters).",
+      "badEmail": "That does not look like an email address.",
+      "tooMany": "You have sent several messages already — please try again later.",
+      "failed": "Your message could not be sent. Please try again in a moment."
+    }
+  },
   "section": {
     "restrictedTitle": "Restricted access",
     "restrictedBody": "Data upload is available only to users with the Editor or Admin role. If you need access, ask an administrator to update your permissions.",
@@ -314,6 +349,8 @@
       "license": "License",
       "access_conditions": "Access conditions",
       "data_source": "Source / organization",
+      "research_group": "Research group",
+      "sampling_type": "Sampling type",
       "provenance": "Provenance",
       "methodology": "Methodology",
       "citation": "How to cite",
@@ -337,6 +374,21 @@
       "related_datasets": "Related datasets",
       "subject": "Subject",
       "geographic_bounding_box": "Geographic extent"
+    },
+    "samplingTypes": {
+      "FARM_COMPOSITE": "Farm-level composite sample",
+      "SINGLE_POINT": "Single-point soil sample"
+    },
+    "licenseChoose": "Choose a license…",
+    "licenseOther": "Other (type it)",
+    "licenseOtherPlaceholder": "License name or link",
+    "licenseOptions": {
+      "cc_by": "reuse allowed with credit to the authors (the usual choice)",
+      "cc0": "public domain: no conditions at all",
+      "cc_by_sa": "credit required; derived data must keep this same license",
+      "cc_by_nc": "credit required; no commercial use",
+      "cc_by_nc_sa": "credit required; no commercial use; same license for derived data",
+      "odbl": "open database license: credit and share-alike for databases"
     }
   },
   "visualization": {
@@ -494,12 +546,81 @@
       "variables": { "title": "Select variables", "description": "Search and check up to 12 variables to compare — pick just one to see it on its own." },
       "loadButton": { "title": "Load the data", "description": "Once you've picked your filters and variables, click here to bring the data into the explorer." },
       "canvas": { "title": "Build your chart", "description": "Drag a field from the left onto X or Y to plot it, or drop one onto \"Color\" to color your points by it." },
+      "button": "Guided tour",
       "next": "Next",
+      "prev": "Back",
       "done": "Got it",
       "close": "Close"
     }
   },
   "upload": {
+    "tour": {
+      "button": "Guided tour",
+      "buttons": {
+        "next": "Next",
+        "prev": "Back",
+        "done": "Got it",
+        "close": "Close"
+      },
+      "step": {
+        "modes": {
+          "title": "Three ways to load data",
+          "description": "Import a file (this tour), enter records by hand, or open the column glossary to see what each field means."
+        },
+        "steps": {
+          "title": "Four steps",
+          "description": "Metadata, template, file and validation. Finished steps are ticked, and you can go back to them without losing what you typed."
+        },
+        "target": {
+          "title": "New dataset, or an existing one?",
+          "description": "Start a new dataset, or add more data to one already on the platform — its description is loaded so you don't retype it."
+        },
+        "dataverse": {
+          "title": "Already published on Dataverse?",
+          "description": "Enter its DOI and this form is prefilled from it."
+        },
+        "form": {
+          "title": "Describe the dataset",
+          "description": "Fill in the required fields (marked with *). Every section is open; collapse the ones you don't need. Your draft is saved automatically."
+        },
+        "continue": {
+          "title": "Always one click away",
+          "description": "This bar follows you down the form: it lists what is still missing, and the button turns on once the required fields are done."
+        },
+        "skip": {
+          "title": "Already have the filled template?",
+          "description": "Skip straight to uploading your file. If it doesn't follow our template, you'll match its columns afterwards."
+        },
+        "columns": {
+          "title": "Choose the columns",
+          "description": "Tick only what you measured. Required fields are always included, and the variable groups start collapsed — search to find one quickly."
+        },
+        "download": {
+          "title": "Download your template",
+          "description": "Get an Excel template with just the columns you chose, fill it in, and come back to upload it."
+        },
+        "dropzone": {
+          "title": "Drop your file here",
+          "description": "Excel or CSV. Drag it in, or click to browse. A file that isn't from our template is fine: you'll match its columns next."
+        },
+        "next": {
+          "title": "Checked before it is sent",
+          "description": "We validate the file first and show any problems. Nothing is submitted yet."
+        },
+        "summary": {
+          "title": "What we found",
+          "description": "How many rows are valid, and how many errors or warnings the file has."
+        },
+        "issues": {
+          "title": "Problems, grouped",
+          "description": "The same problem across many rows is listed once, with an example value and row numbers. Errors block the upload; warnings don't."
+        },
+        "import": {
+          "title": "Send for review",
+          "description": "Nothing is published yet: a reviewer checks the upload and approves it."
+        }
+      }
+    },
     "header": {
       "title": "Data Upload",
       "subtitle": "Import data from Excel files using customizable templates"
@@ -522,9 +643,7 @@
       "goBackTo": "Go back to step: {step}"
     },
     "intro": {
-      "title": "Upload a dataset in 4 steps",
-      "body": "First you describe your dataset, then you pick the template, upload your file and review the validation. Once submitted it goes <b>into review</b>: a database editor approves it before anyone else can see it.",
-      "bring": "Have your data file ready (Excel or CSV).",
+      "summary": "First you describe your dataset, then you pick the template, upload your file and review the validation. Once submitted it goes <b>into review</b>: a database editor approves it before anyone else can see it. Have your data file ready (Excel or CSV).",
       "requiredNote": "Only 4 items are required; the rest is optional and you can fill it in later."
     },
     "valueTypes": {
@@ -605,16 +724,14 @@
       "loadingColumns": "Loading available columns…",
       "selectedColumns": "Selected columns",
       "columnsCount": "{selected} of {total} columns",
-      "haveTemplate": "I already have the template",
+      "haveTemplate": "I already have my file",
       "downloadTemplate": "Download Excel Template",
       "required": "Required",
-      "skipTitle": "Already have your template filled in?",
-      "skipBody": "Skip choosing columns and go straight to uploading your file.",
+      "requiredLocation": "coordinates, or admin 1 + 2",
+      "skipTitle": "Already have your file ready?",
+      "skipBody": "Skip choosing columns and go straight to uploading it. If it doesn't follow our template, you'll match its columns afterwards.",
       "disclaimerTitle": "You are responsible for the data you upload",
       "disclaimerBody": "By uploading a file you confirm that you have the right to share this data and that you are accountable for its accuracy, its quality and any permissions required. Check the access level before submitting.",
-      "ownHeadersTitle": "Does your file not follow our template?",
-      "ownHeadersBody": "This is the long way: you upload it as it is and then say which field each column corresponds to. If you can, use the template: it is faster.",
-      "ownHeadersButton": "Map my columns",
       "dataverseTitle": "Is the data already published on Dataverse?",
       "dataverseBody": "Bring the dataset in by its DOI: we'll prefill the ficha and you'll just need to map the columns.",
       "dataverseButton": "Import from Dataverse"
@@ -627,7 +744,8 @@
       "supports": "Supports .xlsx, .xls, .csv",
       "validating": "Validating…",
       "validateContinue": "Validate and Continue",
-      "ownHeadersToggle": "My file does not come from the platform's template: I want to say what each column is myself (one extra step).",
+      "detectedTemplate": "Recognized as the platform's template.",
+      "detectedOther": "This file doesn't use the platform's template, so in the next step you'll match each of its columns to our fields (we suggest the matches we can).",
       "headerRowLabel": "Which row holds your column headers?",
       "headerRowHint": "Count from row 1, including any title or blank rows above the header.",
       "parsingFile": "Reading file…",
@@ -641,6 +759,7 @@
       "example": "Example: {value}",
       "duplicateTarget": "This field is already assigned to another one of your columns — each field can only be used once.",
       "missingRequired": "Required fields still unmapped: {fields}.",
+      "missingLocation": "The sites need a location: map latitude and longitude, or admin 1 and admin 2.",
       "noneMapped": "Map at least one column to continue.",
       "back": "Back",
       "continue": "Continue",
@@ -699,16 +818,32 @@
       "exampleValue": "Example",
       "issues": {
         "INVALID_DATE": "Invalid date. Use a specific date formatted as YYYY-MM-DD (e.g. 2019-03-15); DD/MM/YYYY and DD-MM-YYYY also work. A range such as \"March/April 2019\" is not a date — use the sampling day for this row.",
-        "NOT_NUMERIC": "Not a number. Enter the number only (e.g. 12.5), with a dot or comma decimal separator. For results below the detection limit write \"<LOQ\", \"<LOD\" or \"<0.5\". If there is no value, leave the cell empty or write \"NA\".",
+        "NOT_NUMERIC": "This cell is not a number. In the template write only the number (e.g. 12.5; a decimal comma also works). If the lab reported the result below its detection or quantification limit, write '<'LOQ, '<'LCM or '<'0.5: the sign '<' followed by the limit, as the lab gave it. If there is no result, leave the cell empty or write NA.",
         "NOT_NUMERIC_latitude": "Latitude is not a number. Use decimal degrees with a dot (e.g. 4.6097), not degrees and minutes.",
         "NOT_NUMERIC_longitude": "Longitude is not a number. Use decimal degrees with a dot (e.g. -74.0817), not degrees and minutes.",
         "NOT_BOOLEAN": "Value not recognised as Yes/No. Use \"Yes\"/\"No\", \"true\"/\"false\" or 1/0.",
         "OUT_OF_RANGE": "Value outside the allowed range for this column.",
         "OUT_OF_RANGE_latitude": "Latitude out of range. It must be between -90 and 90.",
         "OUT_OF_RANGE_longitude": "Longitude out of range. It must be between -180 and 180.",
-        "REQUIRED": "This column is required and the row leaves it empty. Fill it in or remove the row.",
+        "REQUIRED": "This column is required and this row leaves it empty. Fill in the cell in the template, or delete the row if it is a stray one.",
+        "REQUIRED_project_code": "Every row needs the project code, the same one on all rows (e.g. CLOC_CO). Fill in the “Project Code” column of the template. If you are adding data to a dataset that is already on the platform, go back to step 1 and choose it: then the column can stay empty.",
+        "REQUIRED_project_name": "Every row needs the project name, the same on all rows. Fill in the “Project Name” column of the template.",
+        "REQUIRED_site_code": "Every row needs the code of its site. Fill in the “Site Code” column; the rows of one site repeat the same code.",
+        "REQUIRED_event_date": "Every row needs the sampling date. Fill in the “Sampling Date” column as YYYY-MM-DD (e.g. 2024-03-15).",
+        "REQUIRED_sample_code": "Every row needs a code that identifies its sample. Fill in the “Sample Code” column (each sample has its own code).",
+        "REQUIRED_sample_type_code": "Every row needs the sample type. Fill in the “Sample Type” column: SOIL for soil samples (also LEAF, GRAIN, SOIL_PROFILE or SOIL_HORIZON).",
         "MISSING_COLUMN": "A required column is missing from the file. Download the template again and copy your data into it.",
         "DUPLICATE": "Duplicate sample within the file: another row has the same site, date and sample code. Keep only one.",
+        "LOCATION_COLUMNS_MISSING": "The file has no way to place its sites: it needs the latitude and longitude columns, or the admin 1 and admin 2 columns.",
+        "LOCATION_REQUIRED": "This row has no coordinates and no admin 1 + admin 2: give the coordinates, or both administrative levels.",
+        "COORDINATES_INCOMPLETE": "Latitude and longitude go together: give both, or leave both empty and fill in admin 1 and admin 2.",
+        "ADMIN_NOT_FOUND": "Without coordinates the site is placed by its administrative areas, and this one is not recognised. Check the spelling, give the country, or give the coordinates.",
+        "COUNTRY_REQUIRED": "Without coordinates the site is placed by its administrative areas, and that needs the country. Fill in the country column.",
+        "APPROXIMATE_LOCATION": "No coordinates: the site is placed at the centre of its admin 2 area and marked as approximate on the map and in downloads.",
+        "ADMIN_LEVEL_FALLBACK": "The admin 2 was not found in its admin 1, so the site is placed at the centre of the admin 1 area (approximate). Check the spelling to place it more precisely.",
+        "HEADER_MISMATCH": "This column was read as a different field than its header says: the file has no technical-id row, so columns are matched by position. Upload the file again so each column is matched by its name in the next step.",
+        "COLUMNS_IGNORED": "Some columns of the file were not read at all (they come after the ones selected in the template step). Select them there, or upload the file again to match its columns by name.",
+        "PROJECT_MISMATCH": "This row names a different dataset than the one you chose. Use the chosen dataset’s code or leave the project_code column empty.",
         "ALREADY_EXISTS": "A value already exists for this sample in this column. Uploads only add new data, they never overwrite. Remove those rows from the file.",
         "POSSIBLE_SWAP": "Latitude and longitude possibly swapped? Check the point lands where you expect.",
         "NEW_SAMPLE_TYPE": "This sample type is not in the catalogue yet; it will be created when the upload is approved.",
@@ -759,7 +894,8 @@
       "tabs": {
         "sitio": "Sites",
         "muestra": "Samples",
-        "perfil": "Soil profiles"
+        "perfil": "Soil profiles",
+        "medicion": "Measurements"
       },
       "entity": {
         "sitio": "site",
@@ -808,6 +944,27 @@
         "idAttrRequired": "Enter the sample ID and the attribute.",
         "registered": "Value registered for the sample."
       },
+        "measurement": {
+          "createVariableTitle": "Create a variable",
+          "createVariableBody": "Add a variable to the catalogue so that it can be measured and used in uploads.",
+          "newVariable": "New variable",
+          "variablesRestricted": "Only people who manage the catalogue can add new variables. If one is missing, ask an administrator.",
+          "registerTitle": "Register a measurement",
+          "registerHint": "A measurement is the value of one variable in one sample. Choose the sample by its project and site.",
+          "site": "Site *",
+          "sample": "Sample *",
+          "noSamples": "This site has no samples yet",
+          "variable": "Variable *",
+          "variableSearch": "Search a variable by name, code or matrix…",
+          "value": "Value *",
+          "unit": "Unit",
+          "register": "Register measurement",
+          "required": "Choose the sample and the variable first.",
+          "numberRequired": "Enter the value as a number.",
+          "valueRequired": "Enter the value.",
+          "registered": "Measurement registered.",
+          "registerError": "Could not register the measurement."
+        },
       "profile": {
         "createProfileTitle": "Create soil profile",
         "project": "Project *",
@@ -825,17 +982,37 @@
         "registered": "Value registered for the profile."
       }
     },
+    "target": {
+      "title": "Where do these data go?",
+      "newOption": "A new dataset",
+      "newHint": "You will describe it in the form below.",
+      "existingOption": "An existing dataset",
+      "existingHint": "Add samples or results to a dataset that is already in the platform. Its description is loaded, so you do not have to type it again.",
+      "searchPlaceholder": "Search by title, code or organization…",
+      "loadingList": "Loading datasets…",
+      "loadingDescription": "Loading the dataset’s description…",
+      "loadError": "Could not load the datasets. Reload the page and try again.",
+      "noMatch": "No dataset matches your search.",
+      "selected": "Adding data to",
+      "change": "Change",
+      "versionHint": "Its current version is {version}. If you are adding new data, consider raising it (it is under “Authorship and citation”). It is not required: if you are only correcting data of the same version, leave it as it is.",
+      "noVersionHint": "It has no version set yet. If you are adding new data, consider setting one (under “Authorship and citation”). It is not required.",
+      "reviewNote": "The description below is the dataset’s current one; only what you change is sent. A reviewer approves the upload before anything is published.",
+      "banner": "Adding data to <b>{name}</b> (code <b>{code}</b>). In the file, leave the project_code column empty or use this code: it cannot name another dataset.",
+      "pickFirst": "Choose the dataset to continue."
+    },
     "ficha": {
       "title_": "Dataset record",
       "subtitle": "Describe the dataset. It will be applied to the project once a reviewer approves the upload.",
       "fichaRequired": "Fill in the required items to continue.",
       "essentialTitle": "The essentials",
-      "essentialSubtitle": "Without these four items nobody could find, understand or ask about your dataset.",
+      "essentialSubtitle": "Without these items nobody could find, understand or ask about your dataset. A few more required items are in the sections below: open each one and review it.",
       "requiredProgress": "{done} of {total} completed",
       "required": "required",
-      "optionalTitle": "More details (optional)",
-      "optionalSubtitle": "The more you fill in, the easier it is to find and cite your dataset. You can leave it for later.",
+      "optionalTitle": "More details",
+      "optionalSubtitle": "Some items here are required (marked with *). The rest are optional, but the more you fill in, the easier it is to find and cite your dataset.",
       "filledCount": "{filled} of {total} filled",
+      "requiredPending": "{n} required pending",
       "missingLabel": "Missing:",
       "readyLabel": "All set to continue",
       "autosaved": "Your progress is saved in this browser automatically.",
@@ -865,8 +1042,11 @@
       "spatialTypes": {
         "POINT": "Points",
         "LINE": "Lines",
-        "POLYGON": "Polygons",
-        "RASTER": "Grid / raster"
+        "POLYGON": "Polygons"
+      },
+      "samplingTypes": {
+        "FARM_COMPOSITE": "Farm-level composite sample",
+        "SINGLE_POINT": "Single-point soil sample"
       },
       "placeholder": {
         "title": "Soil organic carbon in cocoa systems, Cauca 2024",
@@ -882,6 +1062,7 @@
         "license": "Pick or type a license, e.g. CC-BY-4.0",
         "access_conditions": "Request access from the data steward; a use agreement is required.",
         "data_source": "Alliance of Bioversity International and CIAT",
+        "research_group": "Soil Health and Land Restoration",
         "provenance": "2024 field campaign of the Clima-LoCa project.",
         "methodology": "Carbon by Walkley-Black; pH in water 1:2.5.",
         "citation": "Ruiz, A. (2024). Cocoa soils of Cauca. CIAT.",
@@ -901,15 +1082,17 @@
         "title": "The name the dataset will be published and searched under. Descriptive, not an internal code.",
         "abstract": "Summary of what the dataset holds: what was measured, where, when and why. This is what a reader sees first.",
         "keywords": "Terms that help people find the dataset. Concepts from FAO's AGROVOC thesaurus are suggested; you can also add your own terms.",
-        "version": "Version number of this dataset. Raise it when you publish a correction or an extension.",
+        "version": "Version number of this dataset. Consider raising it when you add new data or publish an extension. It is not required: if you are only fixing data of the same version, you can keep it as it is.",
         "persistent_id": "The dataset's DOI, if it was already published in TIP, Dataverse or similar. A permanent identifier such as 10.1234/zenodo.5678901. Leave empty if it has none yet: it is assigned on publication.",
         "related_publications": "DOIs of scientific papers that used this data. Not the dataset's own DOI, but the publications citing it.",
         "temporal_coverage_start": "Date of the earliest sampling this dataset covers.",
         "temporal_coverage_end": "Date of the latest sampling. Leave empty if the campaign is still running.",
         "spatial_coverage": "Geographic area the data covers: region, state or country.",
-        "spatial_data_type": "Geometry the data describes. The platform stores sites as points today; pick another option if your dataset describes lines, polygons or a grid.",
+        "spatial_data_type": "Geometry the data describes. The platform stores sites as points today; pick another option if your dataset describes lines or polygons.",
         "expected_matrices": "Material analysed (soil, leaf, grain). Filled in automatically from your file.",
         "expected_variables": "Variables measured in the dataset. Filled in automatically from your file.",
+        "sampling_type": "How the soil was sampled. A farm-level composite sample mixes several subsamples from one farm into a single sample; a single-point sample is taken at one location.",
+        "research_group": "Research group or team, within the organization above, that produced the data.",
         "sampling_design": "How sampling points were chosen: random, stratified, grid, number of replicates.",
         "access_level": "Who will be able to see the data: Public (any user), Restricted (named people only) or Private (you and the data team).",
         "authorized_users": "People allowed to see this restricted dataset. Whoever uploads it always keeps access.",
@@ -934,8 +1117,8 @@
       },
       "searchKeywords": "Type to search AGROVOC…",
       "addFreeKeyword": "Add “{term}” as a custom keyword",
-      "skipTitle": "Already have your template filled in?",
-      "skipBody": "Skip choosing columns and go straight to uploading your file.",
+      "skipTitle": "Already have your file ready?",
+      "skipBody": "Skip choosing columns and go straight to uploading it. If it doesn't follow our template, you'll match its columns afterwards.",
       "removeKeyword": "Remove keyword",
       "keywordsHint": "Those with a link icon are anchored to an AGROVOC concept."
     }
@@ -1113,6 +1296,7 @@
       "loading": "Loading site detail...",
       "project": "Project",
       "coordinates": "Coordinates",
+      "approximate": "Approximate: centre of {area}",
       "countryRegion": "Country / Region",
       "altitude": "Altitude",
       "measurements": "Measurements",
@@ -1125,9 +1309,14 @@
     },
     "popup": {
       "coordinates": "Coordinates:",
-      "measurements": "Measurements:"
+      "measurements": "Measurements:",
+      "approximate": "Approximate location:",
+      "centreOfAdmin2": "centre of {area}",
+      "centreOfAdmin1": "centre of {area} (department/state)",
+      "approximateShort": "Approximate location"
     },
-    "noCoordinates": "Not enough coordinates to draw the map."
+    "noCoordinates": "Not enough coordinates to draw the map.",
+    "approximateNote": "{count, plural, one {# site has} other {# sites have}} no coordinates: shown with a dashed outline at the centre of its municipality or department, spread around it so each can be selected."
   },
   "home": {
     "eyebrow": "Soil Research Data Platform",

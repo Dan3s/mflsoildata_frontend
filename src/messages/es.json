@@ -10,7 +10,7 @@
     "loading": "Cargando…"
   },
   "chat": {
-    "title": "AI Assistant",
+    "title": "Asistente de IA",
     "close": "Cerrar chat",
     "emptyState": "Pregúntame sobre los datasets, sitios, muestras o variables de la plataforma.",
     "inputPlaceholder": "Escribe una pregunta…",
@@ -19,6 +19,41 @@
     "signInPrompt": "Inicia sesión para preguntarle al asistente sobre los datos de la plataforma.",
     "signIn": "Iniciar sesión",
     "errorMessage": "Algo salió mal al responder — intenta de nuevo."
+  },
+  "help": {
+    "launcher": "Ayuda",
+    "close": "Cerrar",
+    "menuLabel": "Opciones de ayuda"
+  },
+  "feedback": {
+    "button": "Feedback",
+    "title": "Envíanos tus comentarios",
+    "close": "Cerrar comentarios",
+    "intro": "¿Encontraste un problema o tienes una idea? Cuéntanos — le llega directamente al equipo.",
+    "typeLabel": "¿Sobre qué es?",
+    "types": {
+      "bug": "Algo no funciona",
+      "suggestion": "Una idea o sugerencia",
+      "question": "Una pregunta",
+      "other": "Otra cosa"
+    },
+    "messageLabel": "Tu mensaje",
+    "messagePlaceholder": "¿Qué pasó, o qué te gustaría ver?",
+    "characters": "{count} / {max}",
+    "emailLabel": "Tu correo (opcional)",
+    "emailHelp": "Solo si quieres que te respondamos. Si lo dejas vacío, no sabremos quién escribió.",
+    "pageNote": "También enviamos la página en la que estás y tu navegador, para ayudarnos a reproducir los problemas.",
+    "send": "Enviar comentarios",
+    "sending": "Enviando…",
+    "sentTitle": "¡Gracias!",
+    "sentBody": "Tu mensaje le llegó al equipo.",
+    "another": "Enviar otro",
+    "errors": {
+      "tooShort": "Escribe un poco más (al menos {min} caracteres).",
+      "badEmail": "Eso no parece un correo electrónico.",
+      "tooMany": "Ya enviaste varios mensajes — inténtalo de nuevo más tarde.",
+      "failed": "No se pudo enviar tu mensaje. Inténtalo de nuevo en un momento."
+    }
   },
   "section": {
     "restrictedTitle": "Acceso restringido",
@@ -314,6 +349,8 @@
       "license": "Licencia",
       "access_conditions": "Condiciones de acceso",
       "data_source": "Fuente / organización",
+      "research_group": "Grupo de investigación",
+      "sampling_type": "Tipo de muestreo",
       "provenance": "Procedencia",
       "methodology": "Metodología",
       "citation": "Cómo citar",
@@ -337,6 +374,21 @@
       "related_datasets": "Datasets relacionados",
       "subject": "Disciplina",
       "geographic_bounding_box": "Extensión geográfica"
+    },
+    "samplingTypes": {
+      "FARM_COMPOSITE": "Muestra compuesta a nivel de finca",
+      "SINGLE_POINT": "Muestra individual de un punto"
+    },
+    "licenseChoose": "Elige una licencia…",
+    "licenseOther": "Otra (escríbela)",
+    "licenseOtherPlaceholder": "Nombre o enlace de la licencia",
+    "licenseOptions": {
+      "cc_by": "se puede reutilizar citando a los autores (la opción habitual)",
+      "cc0": "dominio público: sin ninguna condición",
+      "cc_by_sa": "se debe citar; los datos derivados conservan esta misma licencia",
+      "cc_by_nc": "se debe citar; sin uso comercial",
+      "cc_by_nc_sa": "se debe citar; sin uso comercial; misma licencia para los derivados",
+      "odbl": "licencia abierta de bases de datos: citar y compartir igual"
     }
   },
   "visualization": {
@@ -494,12 +546,81 @@
       "variables": { "title": "Selecciona variables", "description": "Busca y marca hasta 12 variables para comparar — elige solo una para verla por sí sola." },
       "loadButton": { "title": "Carga los datos", "description": "Cuando termines de elegir filtros y variables, haz clic aquí para traer los datos al explorador." },
       "canvas": { "title": "Arma tu gráfico", "description": "Arrastra un campo de la izquierda hacia X o Y para graficarlo, o suéltalo en \"Color\" para colorear tus puntos por esa variable." },
+      "button": "Ver guía",
       "next": "Siguiente",
+      "prev": "Atrás",
       "done": "Entendido",
       "close": "Cerrar"
     }
   },
   "upload": {
+    "tour": {
+      "button": "Ver guía",
+      "buttons": {
+        "next": "Siguiente",
+        "prev": "Atrás",
+        "done": "Entendido",
+        "close": "Cerrar"
+      },
+      "step": {
+        "modes": {
+          "title": "Tres formas de cargar datos",
+          "description": "Importar un archivo (esta guía), ingresar registros a mano, o abrir el glosario de columnas para ver qué significa cada campo."
+        },
+        "steps": {
+          "title": "Cuatro pasos",
+          "description": "Metadatos, plantilla, archivo y validación. Los pasos terminados quedan marcados y puedes volver a ellos sin perder lo que escribiste."
+        },
+        "target": {
+          "title": "¿Dataset nuevo o uno existente?",
+          "description": "Crea un dataset nuevo, o agrega más datos a uno que ya está en la plataforma — se carga su descripción para que no la escribas de nuevo."
+        },
+        "dataverse": {
+          "title": "¿Ya está publicado en Dataverse?",
+          "description": "Ingresa su DOI y este formulario se rellena con esa información."
+        },
+        "form": {
+          "title": "Describe el dataset",
+          "description": "Completa los campos obligatorios (marcados con *). Todas las secciones están abiertas; cierra las que no necesites. Tu borrador se guarda automáticamente."
+        },
+        "continue": {
+          "title": "Siempre a un clic",
+          "description": "Esta barra te acompaña mientras bajas por el formulario: lista lo que falta, y el botón se activa cuando los campos obligatorios están completos."
+        },
+        "skip": {
+          "title": "¿Ya tienes la plantilla llena?",
+          "description": "Salta directo a subir tu archivo. Si no sigue nuestra plantilla, después emparejarás sus columnas."
+        },
+        "columns": {
+          "title": "Elige las columnas",
+          "description": "Marca solo lo que mediste. Los campos obligatorios siempre se incluyen, y los grupos de variables empiezan cerrados — usa el buscador para encontrar una rápido."
+        },
+        "download": {
+          "title": "Descarga tu plantilla",
+          "description": "Obtén una plantilla de Excel con solo las columnas que elegiste, llénala y vuelve para subirla."
+        },
+        "dropzone": {
+          "title": "Suelta tu archivo aquí",
+          "description": "Excel o CSV. Arrástralo, o haz clic para buscarlo. Un archivo que no viene de nuestra plantilla está bien: luego emparejarás sus columnas."
+        },
+        "next": {
+          "title": "Se revisa antes de enviarse",
+          "description": "Primero validamos el archivo y te mostramos los problemas. Todavía no se envía nada."
+        },
+        "summary": {
+          "title": "Lo que encontramos",
+          "description": "Cuántas filas son válidas, y cuántos errores o advertencias tiene el archivo."
+        },
+        "issues": {
+          "title": "Problemas, agrupados",
+          "description": "El mismo problema en muchas filas aparece una sola vez, con un valor de ejemplo y los números de fila. Los errores bloquean la carga; las advertencias no."
+        },
+        "import": {
+          "title": "Enviar a revisión",
+          "description": "Todavía no se publica nada: una persona revisora comprueba la carga y la aprueba."
+        }
+      }
+    },
     "header": {
       "title": "Carga de Datos",
       "subtitle": "Importar datos desde archivos Excel usando plantillas personalizables"
@@ -522,9 +643,7 @@
       "goBackTo": "Volver al paso: {step}"
     },
     "intro": {
-      "title": "Sube un dataset en 4 pasos",
-      "body": "Primero describes tu dataset, luego eliges la plantilla, subes tu archivo y revisas la validación. Al enviarlo queda <b>en revisión</b>: un editor de la base de datos lo aprueba antes de que otras personas puedan verlo.",
-      "bring": "Ten a mano tu archivo de datos (Excel o CSV).",
+      "summary": "Primero describes tu dataset, luego eliges la plantilla, subes tu archivo y revisas la validación. Al enviarlo queda <b>en revisión</b>: un editor de la base de datos lo aprueba antes de que otras personas puedan verlo. Ten a mano tu archivo de datos (Excel o CSV).",
       "requiredNote": "Solo 4 datos son obligatorios; el resto es opcional y puedes completarlo después."
     },
     "valueTypes": {
@@ -605,16 +724,14 @@
       "loadingColumns": "Cargando columnas disponibles…",
       "selectedColumns": "Columnas seleccionadas",
       "columnsCount": "{selected} de {total} columnas",
-      "haveTemplate": "Ya tengo la plantilla",
+      "haveTemplate": "Ya tengo mi archivo",
       "downloadTemplate": "Descargar Plantilla Excel",
       "required": "Obligatorio",
-      "skipTitle": "¿Ya tienes la plantilla llena?",
-      "skipBody": "Sáltate la selección de columnas y pasa directo a subir tu archivo.",
+      "requiredLocation": "coordenadas, o admin 1 + 2",
+      "skipTitle": "¿Ya tienes tu archivo listo?",
+      "skipBody": "Sáltate la selección de columnas y pasa directo a subirlo. Si no sigue nuestra plantilla, después emparejarás sus columnas.",
       "disclaimerTitle": "Eres responsable de los datos que subes",
       "disclaimerBody": "Al subir un archivo confirmas que tienes derecho a compartir estos datos y que respondes por su exactitud, su calidad y por los permisos necesarios. Revisa el nivel de acceso antes de enviarlos.",
-      "ownHeadersTitle": "¿Tu archivo no sigue nuestra plantilla?",
-      "ownHeadersBody": "Es el camino largo: lo subes tal cual y luego indicas a qué campo corresponde cada columna. Si puedes, usa la plantilla: es más rápido.",
-      "ownHeadersButton": "Mapear mis columnas",
       "dataverseTitle": "¿Los datos ya están publicados en Dataverse?",
       "dataverseBody": "Trae el dataset por su DOI: te prellenamos la ficha y solo falta mapear las columnas.",
       "dataverseButton": "Importar desde Dataverse"
@@ -627,7 +744,8 @@
       "supports": "Soporta .xlsx, .xls, .csv",
       "validating": "Validando…",
       "validateContinue": "Validar y Continuar",
-      "ownHeadersToggle": "Mi archivo no viene de la plantilla de la plataforma: quiero indicar yo a qué corresponde cada columna (un paso extra).",
+      "detectedTemplate": "Reconocido como la plantilla de la plataforma.",
+      "detectedOther": "Este archivo no usa la plantilla de la plataforma, así que en el siguiente paso emparejarás cada una de sus columnas con nuestros campos (sugerimos las coincidencias que encontremos).",
       "headerRowLabel": "¿En qué fila está el encabezado de tus columnas?",
       "headerRowHint": "Cuenta desde la fila 1, incluyendo filas de título o en blanco arriba del encabezado.",
       "parsingFile": "Leyendo archivo…",
@@ -641,6 +759,7 @@
       "example": "Ejemplo: {value}",
       "duplicateTarget": "Este campo ya está asignado a otra columna tuya — cada campo solo puede usarse una vez.",
       "missingRequired": "Faltan campos obligatorios por mapear: {fields}.",
+      "missingLocation": "Los sitios necesitan una ubicación: asigna latitud y longitud, o admin 1 y admin 2.",
       "noneMapped": "Mapea al menos una columna para continuar.",
       "back": "Volver",
       "continue": "Continuar",
@@ -699,16 +818,32 @@
       "exampleValue": "Ejemplo",
       "issues": {
         "INVALID_DATE": "Fecha inválida. Escribe una fecha concreta con formato AAAA-MM-DD (ej. 2019-03-15); también se aceptan DD/MM/AAAA y DD-MM-AAAA. Un rango como «March/April 2019» no es una fecha: usa el día de muestreo de esa fila.",
-        "NOT_NUMERIC": "Valor no numérico. Escribe solo el número (ej. 12.5), con punto o coma decimal. Para resultados bajo el límite de detección escribe «<LOQ», «<LOD» o «<0.5». Si no hay valor, deja la celda vacía o escribe «NA».",
+        "NOT_NUMERIC": "Esta celda no es un número. En la plantilla escribe solo el número (ej. 12.5; también sirve la coma decimal). Si el laboratorio reportó el resultado por debajo de su límite de detección o cuantificación, escribe '<'LOQ, '<'LCM o '<'0.5: el signo '<' seguido del límite, como lo dio el laboratorio. Si no hay resultado, deja la celda vacía o escribe NA.",
         "NOT_NUMERIC_latitude": "Latitud no numérica. Usa grados decimales con punto (ej. 4.6097), no grados y minutos.",
         "NOT_NUMERIC_longitude": "Longitud no numérica. Usa grados decimales con punto (ej. -74.0817), no grados y minutos.",
         "NOT_BOOLEAN": "Valor no reconocido como Sí/No. Usa «Sí»/«No», «true»/«false» o 1/0.",
         "OUT_OF_RANGE": "Valor fuera del rango permitido para esta columna.",
         "OUT_OF_RANGE_latitude": "Latitud fuera de rango. Debe estar entre -90 y 90.",
         "OUT_OF_RANGE_longitude": "Longitud fuera de rango. Debe estar entre -180 y 180.",
-        "REQUIRED": "Esta columna es obligatoria y la fila la tiene vacía. Complétala o elimina la fila.",
+        "REQUIRED": "Esta columna es obligatoria y la fila la tiene vacía. Completa la celda en la plantilla, o elimina la fila si sobra.",
+        "REQUIRED_project_code": "Cada fila necesita el código del proyecto, el mismo en todas las filas (ej. CLOC_CO). Completa la columna “Código de Proyecto” de la plantilla. Si vas a agregar datos a un dataset que ya está en la plataforma, vuelve al paso 1 y elígelo: entonces la columna puede quedar vacía.",
+        "REQUIRED_project_name": "Cada fila necesita el nombre del proyecto, el mismo en todas las filas. Completa la columna “Nombre del Proyecto” de la plantilla.",
+        "REQUIRED_site_code": "Cada fila necesita el código de su sitio. Completa la columna “Código del Sitio”; las filas de un mismo sitio repiten el mismo código.",
+        "REQUIRED_event_date": "Cada fila necesita la fecha de muestreo. Completa la columna “Fecha de Muestreo” como AAAA-MM-DD (ej. 2024-03-15).",
+        "REQUIRED_sample_code": "Cada fila necesita un código que identifique su muestra. Completa la columna “Código de Muestra” (cada muestra tiene el suyo).",
+        "REQUIRED_sample_type_code": "Cada fila necesita el tipo de muestra. Completa la columna “Tipo de Muestra”: SOIL para muestras de suelo (también LEAF, GRAIN, SOIL_PROFILE o SOIL_HORIZON).",
         "MISSING_COLUMN": "Falta una columna obligatoria en el archivo. Descarga la plantilla de nuevo y copia tus datos en ella.",
         "DUPLICATE": "Muestra duplicada dentro del archivo: hay otra fila con el mismo sitio, fecha y código de muestra. Deja una sola.",
+        "LOCATION_COLUMNS_MISSING": "El archivo no tiene cómo ubicar sus sitios: necesita las columnas de latitud y longitud, o las de admin 1 y admin 2.",
+        "LOCATION_REQUIRED": "Esta fila no tiene coordenadas ni admin 1 + admin 2: indica las coordenadas, o ambos niveles administrativos.",
+        "COORDINATES_INCOMPLETE": "Latitud y longitud van juntas: indica ambas, o deja ambas vacías y completa admin 1 y admin 2.",
+        "ADMIN_NOT_FOUND": "Sin coordenadas el sitio se ubica por sus áreas administrativas, y esta no se reconoce. Revisa la ortografía, indica el país o indica las coordenadas.",
+        "COUNTRY_REQUIRED": "Sin coordenadas el sitio se ubica por sus áreas administrativas, y para eso hace falta el país. Completa la columna de país.",
+        "APPROXIMATE_LOCATION": "Sin coordenadas: el sitio se ubica en el centro de su área admin 2 y se marca como aproximado en el mapa y en las descargas.",
+        "ADMIN_LEVEL_FALLBACK": "El admin 2 no se encontró dentro de su admin 1, así que el sitio se ubica en el centro del admin 1 (aproximado). Revisa la ortografía para ubicarlo con más precisión.",
+        "HEADER_MISMATCH": "Esta columna se leyó como un campo distinto al que dice su encabezado: el archivo no tiene la fila de ids técnicos, así que las columnas se asignan por posición. Sube el archivo de nuevo para que cada columna se asigne por su nombre en el siguiente paso.",
+        "COLUMNS_IGNORED": "Algunas columnas del archivo no se leyeron (van después de las que seleccionaste en el paso de la plantilla). Selecciónalas allí o sube el archivo de nuevo para emparejar sus columnas por nombre.",
+        "PROJECT_MISMATCH": "Esta fila nombra un dataset distinto al que elegiste. Usa el código del dataset elegido o deja vacía la columna project_code.",
         "ALREADY_EXISTS": "Ya existe un valor para esta muestra en esta columna. Las cargas solo agregan datos nuevos; no sobrescriben. Quita esas filas del archivo.",
         "POSSIBLE_SWAP": "¿Latitud y longitud invertidas? Revisa que el punto caiga donde esperas.",
         "NEW_SAMPLE_TYPE": "Este tipo de muestra no existe en el catálogo todavía; se creará al aprobar la carga.",
@@ -759,7 +894,8 @@
       "tabs": {
         "sitio": "Sitios",
         "muestra": "Muestras",
-        "perfil": "Perfiles de suelo"
+        "perfil": "Perfiles de suelo",
+        "medicion": "Mediciones"
       },
       "entity": {
         "sitio": "sitio",
@@ -808,6 +944,27 @@
         "idAttrRequired": "Indica el ID de muestra y el atributo.",
         "registered": "Valor registrado en la muestra."
       },
+        "measurement": {
+          "createVariableTitle": "Crear una variable",
+          "createVariableBody": "Agrega una variable al catálogo para poder medirla y usarla en las cargas.",
+          "newVariable": "Nueva variable",
+          "variablesRestricted": "Solo quienes administran el catálogo pueden agregar variables nuevas. Si falta una, pídesela a un administrador.",
+          "registerTitle": "Registrar una medición",
+          "registerHint": "Una medición es el valor de una variable en una muestra. Elige la muestra por su proyecto y sitio.",
+          "site": "Sitio *",
+          "sample": "Muestra *",
+          "noSamples": "Este sitio aún no tiene muestras",
+          "variable": "Variable *",
+          "variableSearch": "Busca una variable por nombre, código o matriz…",
+          "value": "Valor *",
+          "unit": "Unidad",
+          "register": "Registrar medición",
+          "required": "Elige primero la muestra y la variable.",
+          "numberRequired": "Ingresa el valor como número.",
+          "valueRequired": "Ingresa el valor.",
+          "registered": "Medición registrada.",
+          "registerError": "No se pudo registrar la medición."
+        },
       "profile": {
         "createProfileTitle": "Crear perfil de suelo",
         "project": "Proyecto *",
@@ -825,17 +982,37 @@
         "registered": "Valor registrado en el perfil."
       }
     },
+    "target": {
+      "title": "¿A dónde van estos datos?",
+      "newOption": "Un dataset nuevo",
+      "newHint": "Lo describirás en el formulario de abajo.",
+      "existingOption": "Un dataset que ya existe",
+      "existingHint": "Agrega muestras o resultados a un dataset que ya está en la plataforma. Se carga su descripción, así que no tienes que escribirla otra vez.",
+      "searchPlaceholder": "Buscar por título, código u organización…",
+      "loadingList": "Cargando datasets…",
+      "loadingDescription": "Cargando la descripción del dataset…",
+      "loadError": "No se pudieron cargar los datasets. Recarga la página e inténtalo de nuevo.",
+      "noMatch": "Ningún dataset coincide con tu búsqueda.",
+      "selected": "Agregando datos a",
+      "change": "Cambiar",
+      "versionHint": "Su versión actual es {version}. Si agregas datos nuevos, considera subirla (está en «Autoría y citación»). No es obligatorio: si solo corriges datos de la misma versión, déjala igual.",
+      "noVersionHint": "Aún no tiene versión. Si agregas datos nuevos, considera asignarle una (en «Autoría y citación»). No es obligatorio.",
+      "reviewNote": "La descripción de abajo es la actual del dataset; solo se envía lo que cambies. Un revisor aprueba la carga antes de que se publique nada.",
+      "banner": "Agregando datos a <b>{name}</b> (código <b>{code}</b>). En el archivo, deja vacía la columna project_code o usa este código: no puede nombrar otro dataset.",
+      "pickFirst": "Elige el dataset para continuar."
+    },
     "ficha": {
       "title_": "Ficha del dataset",
       "subtitle": "Describe el conjunto de datos. Se aplicará al proyecto cuando el revisor apruebe la carga.",
       "fichaRequired": "Completa los datos obligatorios para continuar.",
       "essentialTitle": "Lo esencial",
-      "essentialSubtitle": "Sin estos cuatro datos nadie podría encontrar, entender ni contactar sobre tu dataset.",
+      "essentialSubtitle": "Sin estos datos nadie podría encontrar, entender ni contactar sobre tu dataset. En las secciones de abajo hay otros datos obligatorios más: abre cada una y revísala.",
       "requiredProgress": "{done} de {total} completados",
       "required": "obligatorio",
-      "optionalTitle": "Más detalles (opcional)",
-      "optionalSubtitle": "Cuanto más completes, más fácil será encontrar y citar tu dataset. Puedes dejarlo para después.",
+      "optionalTitle": "Más detalles",
+      "optionalSubtitle": "Algunos datos de aquí son obligatorios (marcados con *). El resto es opcional, pero cuanto más completes, más fácil será encontrar y citar tu dataset.",
       "filledCount": "{filled} de {total} llenos",
+      "requiredPending": "{n} obligatorios pendientes",
       "missingLabel": "Falta:",
       "readyLabel": "Todo listo para continuar",
       "autosaved": "Tu avance se guarda solo en este navegador.",
@@ -865,8 +1042,11 @@
       "spatialTypes": {
         "POINT": "Puntos",
         "LINE": "Líneas",
-        "POLYGON": "Polígonos",
-        "RASTER": "Malla / ráster"
+        "POLYGON": "Polígonos"
+      },
+      "samplingTypes": {
+        "FARM_COMPOSITE": "Muestra compuesta a nivel de finca",
+        "SINGLE_POINT": "Muestra individual de un punto"
       },
       "placeholder": {
         "title": "Carbono orgánico del suelo en cacao, Cauca 2024",
@@ -882,6 +1062,7 @@
         "license": "Elige o escribe una licencia, p. ej. CC-BY-4.0",
         "access_conditions": "Solicitar acceso al responsable del dato; requiere acuerdo de uso.",
         "data_source": "Alliance of Bioversity International and CIAT",
+        "research_group": "Salud de Suelos y Restauración de Tierras",
         "provenance": "Campaña de campo 2024 del proyecto Clima-LoCa.",
         "methodology": "Carbono por Walkley-Black; pH en agua 1:2.5.",
         "citation": "Ruiz, A. (2024). Suelos de cacao del Cauca. CIAT.",
@@ -901,15 +1082,17 @@
         "title": "Nombre con el que el dataset se publicará y se buscará. Descriptivo, no un código interno.",
         "abstract": "Resumen de qué contiene el dataset: qué se midió, dónde, cuándo y para qué. Es lo que leerá quien lo encuentre.",
         "keywords": "Términos para encontrar el dataset. Se sugieren conceptos del tesauro AGROVOC de la FAO; también puedes agregar términos propios.",
-        "version": "Número de versión de este dataset. Súbelo cuando publiques una corrección o una ampliación.",
+        "version": "Número de versión de este dataset. Considera subirlo cuando agregues datos nuevos o publiques una ampliación. No es obligatorio: si solo corriges datos de la misma versión, puedes dejarlo igual.",
         "persistent_id": "DOI del dataset, si ya fue publicado antes en TIP, Dataverse o similar. Es un identificador permanente, por ejemplo 10.1234/zenodo.5678901. Déjalo vacío si aún no tiene: se asigna al publicar.",
         "related_publications": "DOIs de artículos científicos donde se usaron estos datos. No es el DOI del dataset, sino el de las publicaciones que lo citan.",
         "temporal_coverage_start": "Fecha del primer muestreo que cubre este dataset.",
         "temporal_coverage_end": "Fecha del último muestreo. Si la campaña sigue abierta, déjala vacía.",
         "spatial_coverage": "Zona geográfica que abarcan los datos: región, departamento o país.",
-        "spatial_data_type": "Geometría que describen los datos. Hoy la plataforma guarda sitios como puntos; usa otra opción si tu dataset describe líneas, polígonos o una malla.",
+        "spatial_data_type": "Geometría que describen los datos. Hoy la plataforma guarda sitios como puntos; usa otra opción si tu dataset describe líneas o polígonos.",
         "expected_matrices": "Material analizado (suelo, hoja, grano). Se completa solo con lo que trae tu archivo.",
         "expected_variables": "Variables medidas en el dataset. Se completa solo con lo que trae tu archivo.",
+        "sampling_type": "Cómo se muestreó el suelo. La muestra compuesta a nivel de finca mezcla varias submuestras de una finca en una sola; la individual se toma en un solo punto.",
+        "research_group": "Grupo o equipo de investigación, dentro de la organización de arriba, que produjo los datos.",
         "sampling_design": "Cómo se eligieron los puntos de muestreo: aleatorio, estratificado, en malla, número de réplicas.",
         "access_level": "Quién podrá ver los datos: Público (cualquier usuario), Restringido (solo personas autorizadas) o Privado (solo tú y el equipo de datos).",
         "authorized_users": "Personas que podrán ver este dataset restringido. Quien lo sube conserva acceso siempre.",
@@ -934,8 +1117,8 @@
       },
       "searchKeywords": "Escribe para buscar en AGROVOC…",
       "addFreeKeyword": "Agregar «{term}» como palabra propia",
-      "skipTitle": "¿Ya tienes la plantilla llena?",
-      "skipBody": "Sáltate la selección de columnas y pasa directo a subir tu archivo.",
+      "skipTitle": "¿Ya tienes tu archivo listo?",
+      "skipBody": "Sáltate la selección de columnas y pasa directo a subirlo. Si no sigue nuestra plantilla, después emparejarás sus columnas.",
       "removeKeyword": "Quitar palabra clave",
       "keywordsHint": "Las que tienen enlace están ancladas a un concepto de AGROVOC."
     }
@@ -1113,6 +1296,7 @@
       "loading": "Cargando detalle del sitio...",
       "project": "Proyecto",
       "coordinates": "Coordenadas",
+      "approximate": "Aproximada: centro de {area}",
       "countryRegion": "País / Región",
       "altitude": "Altitud",
       "measurements": "Mediciones",
@@ -1125,9 +1309,14 @@
     },
     "popup": {
       "coordinates": "Coordenadas:",
-      "measurements": "Mediciones:"
+      "measurements": "Mediciones:",
+      "approximate": "Ubicación aproximada:",
+      "centreOfAdmin2": "centro de {area}",
+      "centreOfAdmin1": "centro de {area} (departamento/estado)",
+      "approximateShort": "Ubicación aproximada"
     },
-    "noCoordinates": "No hay coordenadas suficientes para dibujar el mapa."
+    "noCoordinates": "No hay coordenadas suficientes para dibujar el mapa.",
+    "approximateNote": "{count, plural, one {# sitio no tiene} other {# sitios no tienen}} coordenadas: se muestran con borde discontinuo en el centro de su municipio o departamento, repartidos alrededor para poder seleccionar cada uno."
   },
   "home": {
     "eyebrow": "Plataforma de Datos de Investigación de Suelos",

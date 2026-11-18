@@ -154,7 +154,11 @@ function SiteListItem({
           </div>
           <p className="mt-1 text-xs text-gray-500">{site.project_name ?? t("projectFallback", { id: site.project_id })}</p>
           <div className="mt-3 flex items-center justify-between gap-3 text-xs text-gray-500">
-            <span>{site.latitude ?? "—"}, {site.longitude ?? "—"}</span>
+            <span>
+              {site.location_precision && site.location_precision !== "EXACT"
+                ? t("popup.approximateShort")
+                : `${site.latitude ?? "—"}, ${site.longitude ?? "—"}`}
+            </span>
             <span>{t("measurementsLabel", { count: formatNumber(site.measurement_count, locale) })}</span>
           </div>
         </div>
@@ -191,6 +195,7 @@ export default function MapView({ projectOptions, initialSites, initialSummary, 
 
   const summaryValues = useMemo(() => summarizeSummary(summary, sites), [sites, summary]);
   const visibleSites = useMemo(() => sites.filter(isRenderableCoordinate), [sites]);
+  const approximateCount = visibleSites.filter((s) => s.location_precision && s.location_precision !== "EXACT").length;
   const displayedSites = useMemo(() => {
     const selected = sites.find((site) => site.id === selectedSiteId);
     const rest = selected ? sites.filter((site) => site !== selected) : sites;
@@ -746,6 +751,13 @@ export default function MapView({ projectOptions, initialSites, initialSummary, 
                   <LeafletMap sites={visibleSites} selectedSiteId={selectedSiteId} onSelectSite={setSelectedSiteId} projectColors={projectColors} siteColors={siteColors} />
                 </div>
 
+                {approximateCount > 0 ? (
+                  <p className="mt-3 flex items-start gap-2 text-xs text-gray-500">
+                    <span className="mt-0.5 inline-block h-3 w-3 shrink-0 rounded-full border-2 border-dashed border-gray-400 bg-gray-200/50" aria-hidden />
+                    {t("approximateNote", { count: approximateCount })}
+                  </p>
+                ) : null}
+
                 {colorMode === "variable" && colorVariableId ? (
                   colorScale ? (
                     <div className="mt-4 flex items-center gap-3 text-xs text-gray-500">
@@ -829,7 +841,18 @@ export default function MapView({ projectOptions, initialSites, initialSummary, 
 
                 <div className="mt-5 grid gap-3">
                   <DetailRow label={t("detail.project")} value={selectedSite?.project_name ?? (selectedSite ? t("projectFallback", { id: selectedSite.project_id }) : "—")} />
-                  <DetailRow label={t("detail.coordinates")} value={selectedSite ? `${selectedSite.latitude ?? "—"}, ${selectedSite.longitude ?? "—"}` : "—"} />
+                  <DetailRow
+                    label={t("detail.coordinates")}
+                    value={
+                      !selectedSite
+                        ? "—"
+                        : selectedSite.location_precision && selectedSite.location_precision !== "EXACT"
+                          ? t("detail.approximate", {
+                              area: (selectedSite.location_precision === "ADMIN_1" ? selectedSite.admin_1 : selectedSite.admin_2) ?? "",
+                            })
+                          : `${selectedSite.latitude ?? "—"}, ${selectedSite.longitude ?? "—"}`
+                    }
+                  />
                   <DetailRow label={t("detail.countryRegion")} value={selectedSite ? [selectedSite.country, selectedSite.admin_1, selectedSite.admin_2].filter(Boolean).join(" · ") || "—" : "—"} />
                   <DetailRow label={t("detail.altitude")} value={selectedSite?.altitude_m !== undefined && selectedSite?.altitude_m !== null ? `${selectedSite.altitude_m} m` : "—"} />
                   <DetailRow label={t("detail.measurements")} value={selectedSite ? formatNumber(selectedSite.measurement_count, locale) : "—"} />

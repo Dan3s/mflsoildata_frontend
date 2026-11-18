@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { driver, type Config } from "driver.js";
+import { useCallback, useEffect, useRef } from "react";
+import { driver, type Config, type DriveStep } from "driver.js";
 import "driver.js/dist/driver.css";
 
 const INTRO_SEEN_KEY = "mfl_gw_tour_intro_seen";
@@ -30,6 +30,7 @@ type TourCopy = {
   loadButton: { title: string; description: string };
   canvas: { title: string; description: string };
   next: string;
+  prev: string;
   done: string;
   close: string;
 };
@@ -45,35 +46,54 @@ const baseConfig: Config = {
   stageRadius: 10,
 };
 
+const anchor = (name: string) => `[data-tour="${name}"]`;
+
 /**
- * A short, one-time Driver.js walkthrough for the data explorer — the one view
- * usability testing flagged as the least self-explanatory (unfamiliar
- * pivot-table UI). Split in two instead of one linear tour: the filter steps
- * run on mount, the canvas step runs the first time data actually loads,
- * since Graphic Walker itself doesn't mount until then.
+ * A short Driver.js walkthrough for the data explorer — the one view usability testing flagged
+ * as the least self-explanatory (unfamiliar pivot-table UI). Split in two instead of one linear
+ * tour: the filter steps run on mount, the canvas step runs the first time data actually loads,
+ * since Graphic Walker itself doesn't mount until then. Each part plays once.
+ *
+ * `replay()` plays the whole thing again on demand, as one tour over whatever is on screen
+ * (the caller opens the filters first). A part counts as seen only if the person finishes or
+ * closes it: React re-mounting the effect (StrictMode in development) or leaving the page half
+ * way does not, otherwise the tour would never show in development.
  */
 export function useGraphicWalkerTour(copy: TourCopy, loaded: boolean) {
   const canvasTourShown = useRef(false);
+  // Read through a ref so a re-render (a new `copy` object) never restarts a tour in progress.
+  const copyRef = useRef(copy);
+  copyRef.current = copy;
+  const replayDriver = useRef<ReturnType<typeof driver> | null>(null);
+
+  const labels = () => ({
+    nextBtnText: copyRef.current.next,
+    prevBtnText: copyRef.current.prev,
+    doneBtnText: copyRef.current.done,
+    closeBtnLabel: copyRef.current.close,
+  });
 
   useEffect(() => {
     if (hasSeen(INTRO_SEEN_KEY)) return;
+    let aborted = false;
+    const c = copyRef.current;
     const d = driver({
       ...baseConfig,
-      nextBtnText: copy.next,
-      doneBtnText: copy.done,
-      closeBtnLabel: copy.close,
+      ...labels(),
       steps: [
-        { element: '[data-tour="gw-project"]', popover: { title: copy.project.title, description: copy.project.description, side: "bottom", align: "start" } },
-        { element: '[data-tour="gw-variables"]', popover: { title: copy.variables.title, description: copy.variables.description, side: "top", align: "start" } },
-        { element: '[data-tour="gw-load-button"]', popover: { title: copy.loadButton.title, description: copy.loadButton.description, side: "right", align: "start" } },
+        { element: anchor("gw-project"), popover: { title: c.project.title, description: c.project.description, side: "bottom", align: "start" } },
+        { element: anchor("gw-variables"), popover: { title: c.variables.title, description: c.variables.description, side: "top", align: "start" } },
+        { element: anchor("gw-load-button"), popover: { title: c.loadButton.title, description: c.loadButton.description, side: "right", align: "start" } },
       ],
-      onDestroyed: () => markSeen(INTRO_SEEN_KEY),
+      onDestroyed: () => {
+        if (!aborted) markSeen(INTRO_SEEN_KEY);
+      },
     });
     d.drive();
-    return () => d.destroy();
-    // Runs once on mount — re-running on every copy/locale change would restart
-    // an in-progress tour, which is worse than a stale label mid-tour.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      aborted = true;
+      d.destroy();
+    };
   }, []);
 
   useEffect(() => {
@@ -84,18 +104,50 @@ export function useGraphicWalkerTour(copy: TourCopy, loaded: boolean) {
       // Set here, not before the timer: `copy` is a new object on every render, so this
       // effect re-runs and cancels the timer; a flag set up front would then block the tour forever.
       canvasTourShown.current = true;
+      const c = copyRef.current;
       const d = driver({
         ...baseConfig,
-        nextBtnText: copy.next,
-        doneBtnText: copy.done,
-        closeBtnLabel: copy.close,
-        steps: [
-          { element: '[data-tour="gw-canvas"]', popover: { title: copy.canvas.title, description: copy.canvas.description, side: "top", align: "center" } },
-        ],
+        ...labels(),
+        steps: [{ element: anchor("gw-canvas"), popover: { title: c.canvas.title, description: c.canvas.description, side: "top", align: "center" } }],
         onDestroyed: () => markSeen(CANVAS_SEEN_KEY),
       });
       d.drive();
     }, 600);
     return () => clearTimeout(timer);
-  }, [loaded, copy]);
+  }, [loaded]);
+
+  const replay = useCallback(() => {
+    replayDriver.current?.destroy();
+    // Wait a beat: the caller has just opened the filters and they need to be laid out.
+    setTimeout(() => {
+      const c = copyRef.current;
+      const stops: { name: string; title: string; description: string; side: "top" | "bottom" | "right"; align: "start" | "center" }[] = [
+        { name: "gw-project", ...c.project, side: "bottom", align: "start" },
+        { name: "gw-variables", ...c.variables, side: "top", align: "start" },
+        { name: "gw-load-button", ...c.loadButton, side: "right", align: "start" },
+        { name: "gw-canvas", ...c.canvas, side: "top", align: "center" },
+      ];
+      // Only what is on screen: before the data is loaded there is no canvas to point at.
+      const steps: DriveStep[] = stops
+        .filter((s) => document.querySelector(anchor(s.name)))
+        .map((s) => ({ element: anchor(s.name), popover: { title: s.title, description: s.description, side: s.side, align: s.align } }));
+      if (steps.length === 0) return;
+      const d = driver({
+        ...baseConfig,
+        nextBtnText: c.next,
+        prevBtnText: c.prev,
+        doneBtnText: c.done,
+        closeBtnLabel: c.close,
+        steps,
+        onDestroyed: () => {
+          markSeen(INTRO_SEEN_KEY);
+          if (steps.some((s) => s.element === anchor("gw-canvas"))) markSeen(CANVAS_SEEN_KEY);
+        },
+      });
+      replayDriver.current = d;
+      d.drive();
+    }, 450);
+  }, []);
+
+  return { replay };
 }

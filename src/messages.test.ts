@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parse } from "@formatjs/icu-messageformat-parser";
 import en from "./messages/en.json";
 import es from "./messages/es.json";
 
@@ -31,6 +32,21 @@ describe("translations", () => {
   it("have no empty strings", () => {
     const empty = [...english, ...spanish].filter(([, v]) => v.trim() === "").map(([k]) => k);
     expect(empty).toEqual([]);
+  });
+
+  it("are all valid ICU messages (a literal \"<\" or a stray brace breaks the screen at runtime)", () => {
+    // e.g. "<LOQ" reads as an HTML tag and the message falls back to its raw key; write '<'LOQ.
+    const invalid = [...english, ...spanish]
+      .filter(([, text]) => {
+        try {
+          parse(text);
+          return false;
+        } catch {
+          return true;
+        }
+      })
+      .map(([key]) => key);
+    expect(invalid).toEqual([]);
   });
 
   it("use the same {placeholders} in both languages", () => {

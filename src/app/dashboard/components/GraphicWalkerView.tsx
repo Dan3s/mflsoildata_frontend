@@ -7,7 +7,7 @@ import { useInstitutionOptions } from "./useInstitutionOptions";
 import { useGraphicWalkerTour } from "./useGraphicWalkerTour";
 import { StyleSheetManager } from "styled-components";
 import isPropValid from "@emotion/is-prop-valid";
-import { Loader2, TableProperties, AlertTriangle, Info, Search, SlidersHorizontal, X } from "lucide-react";
+import { Loader2, TableProperties, AlertTriangle, Info, Search, SlidersHorizontal, X, Compass } from "lucide-react";
 import type { IMutField } from "@kanaries/graphic-walker";
 import type { FilterOption, VariableRead, WideColumn } from "@/app/services";
 import { dashboardService, downloadService } from "@/app/services";
@@ -457,13 +457,14 @@ export default function GraphicWalkerView({
     void load("");
   };
 
-  useGraphicWalkerTour(
+  const { replay: replayTour } = useGraphicWalkerTour(
     {
       project: { title: t("tour.project.title"), description: t("tour.project.description") },
       variables: { title: t("tour.variables.title"), description: t("tour.variables.description") },
       loadButton: { title: t("tour.loadButton.title"), description: t("tour.loadButton.description") },
       canvas: { title: t("tour.canvas.title"), description: t("tour.canvas.description") },
       next: t("tour.next"),
+      prev: t("tour.prev"),
       done: t("tour.done"),
       close: t("tour.close"),
     },
@@ -486,14 +487,28 @@ export default function GraphicWalkerView({
           <p className="mt-1 text-base text-gray-500">{t("subtitle")}</p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setFiltersOpen((open) => !open)}
-          className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
-        >
-          <SlidersHorizontal className="h-4 w-4" />
-          {filtersOpen ? t("hideFilters") : t("showFilters")}
-        </button>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/* Replays the walkthrough; the filters have to be open for it to have something to point at. */}
+          <button
+            type="button"
+            onClick={() => {
+              setFiltersOpen(true);
+              replayTour();
+            }}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
+          >
+            <Compass className="h-4 w-4" aria-hidden />
+            {t("tour.button")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((open) => !open)}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {filtersOpen ? t("hideFilters") : t("showFilters")}
+          </button>
+        </div>
       </div>
 
       <ActiveFilters chips={chips} onClearAll={clearAllChips} />
