@@ -7,6 +7,9 @@ export type {
   ChatRequest,
   ChatResponse,
   ChatTurn,
+  FeedbackRequest,
+  FeedbackResponse,
+  FeedbackType,
   AttributeDefinition,
   AttributeDefinitionCreate,
   AttributeValue,
@@ -95,6 +98,7 @@ export type {
 } from "./api-types";
 export { chatService } from "./chat.service";
 export { dashboardService } from "./dashboard.service";
+export { feedbackService } from "./feedback.service";
 export { datasetService } from "./dataset.service";
 export { dataverseService } from "./dataverse.service";
 export type { DownloadedFile } from "./dataverse.service";

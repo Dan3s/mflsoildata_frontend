@@ -12,6 +12,22 @@ export interface ChatResponse {
   reply: string;
 }
 
+export type FeedbackType = "bug" | "suggestion" | "question" | "other";
+
+export interface FeedbackRequest {
+  type: FeedbackType;
+  message: string;
+  contact_email?: string;
+  page?: string;
+  language?: string;
+  /** Honeypot: always empty from a person, filled in by bots. */
+  website?: string;
+}
+
+export interface FeedbackResponse {
+  status: "received";
+}
+
 export interface Project {
   id: number;
   code: string;
@@ -439,6 +455,8 @@ export interface ProjectMetadata {
   temporal_coverage_end?: string | null;
   spatial_coverage?: string | null;
   spatial_data_type?: string | null;
+  /** FARM_COMPOSITE and/or SINGLE_POINT — how the soil was sampled (a dataset can hold both). */
+  sampling_type?: string[] | null;
   expected_matrices?: string[] | null;
   expected_variables?: string | null;
   sampling_design?: string | null;
@@ -448,6 +466,8 @@ export interface ProjectMetadata {
   license?: string | null;
   access_conditions?: string | null;
   data_source?: string | null;
+  /** Research group, within the source organization, that produced the data. */
+  research_group?: string | null;
   provenance?: string | null;
   methodology?: string | null;
   citation?: string | null;
@@ -614,6 +634,9 @@ export interface MapSite {
   admin_2?: string | null;
   admin_3?: string | null;
   altitude_m?: number | null;
+  /** EXACT, or ADMIN_2 / ADMIN_1 when the site has no coordinates and is drawn at the centre of its
+   * municipality / department. */
+  location_precision?: string | null;
   /** Per-site mean of the "color by variable" (present only when requested). */
   color_value?: number | null;
 }
@@ -702,6 +725,9 @@ export interface TemplateColumn {
   id: string;
   label: string;
   required: boolean;
+  /** Set on columns of which a group, not each one, is required ("location": the coordinates, or
+   * else admin 1 + admin 2). */
+  required_one_of?: string | null;
   value_type: TemplateValueType;
   /** Tabla/campo destino en la BD (informativo, p.ej. "measurements", "sites.geom"). */
   db_target?: string | null;
@@ -752,6 +778,8 @@ export interface UploadIssue {
   message: string;
   severity: UploadIssueSeverity;
   code?: string | null;
+  /** The column's name as the template shows it (`column` is its technical id, e.g. "var:14377"). */
+  column_label?: string | null;
   /** Set when `row` belongs to another sheet than the data one (e.g. "New variables"). */
   sheet?: string | null;
 }
@@ -790,6 +818,11 @@ export interface UploadImportRequest {
    * existir todavía). Los campos de QC no se aceptan aquí (403).
    */
   metadata?: ProjectMetadataUpsert;
+  /**
+   * Código de un dataset que ya existe en la plataforma: la carga agrega datos a
+   * él (todas las filas deben pertenecerle) en lugar de crear uno nuevo.
+   */
+  project_code?: string;
 }
 
 export interface UploadImportResponse {

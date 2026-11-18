@@ -34,7 +34,10 @@ export const uploadService = {
    * del Paso 1 / atajo "ya tengo la plantilla") son mutuamente excluyentes:
    * si hay mapeo, éste manda. `headerRow` (1-based) aplica a ambos caminos.
    */
-  validate: (file: File, options?: { columns?: string[]; columnMapping?: ColumnMappingEntry[]; headerRow?: number }) => {
+  validate: (
+    file: File,
+    options?: { columns?: string[]; columnMapping?: ColumnMappingEntry[]; headerRow?: number; projectCode?: string },
+  ) => {
     const form = new FormData();
     form.append("file", file);
     if (options?.columnMapping?.length) {
@@ -44,6 +47,11 @@ export const uploadService = {
     }
     if (options?.headerRow) {
       form.append("header_row", String(options.headerRow));
+    }
+    // Adding to an existing dataset: the API fills rows that leave the project empty and
+    // rejects rows that name another one.
+    if (options?.projectCode) {
+      form.append("project_code", options.projectCode);
     }
     return apiClient.postForm<UploadValidationResponse>("upload/validate", form);
   },

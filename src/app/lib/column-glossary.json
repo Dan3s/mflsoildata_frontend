@@ -63,7 +63,12 @@
         { "name": "admin_2", "type": "Texto", "description": "División administrativa nivel 2 (p. ej. municipio)." },
         { "name": "admin_3", "type": "Texto", "description": "División administrativa nivel 3 (p. ej. vereda/corregimiento)." },
         { "name": "altitude_m", "type": "Número", "description": "Altitud del sitio en metros sobre el nivel del mar." },
-        { "name": "geom", "type": "Geometría (PostGIS)", "required": true, "description": "Geometría del sitio (normalmente un punto) en coordenadas WGS84 (SRID 4326). En la plantilla se ingresa como latitud y longitud." },
+        { "name": "geom", "type": "Geometría (PostGIS)", "required": true, "description": "Geometría del sitio (normalmente un punto) en coordenadas WGS84 (SRID 4326). En la plantilla se ingresa como latitud y longitud o, si no hay coordenadas, como admin 1 y admin 2: entonces el sitio queda en el centro de su municipio (ver location_precision)." },
+        {
+          "name": "location_precision",
+          "type": "Texto",
+          "description": "Qué tan precisa es la ubicación (geom): EXACT si se dieron coordenadas; ADMIN_2 o ADMIN_1 si el sitio no tenía coordenadas y está en el centro de su municipio o departamento (aproximada)."
+        },
         { "name": "location_notes", "type": "JSON", "description": "Datos de ubicación sin columna fija, en JSON (p. ej. «Registro No.»)." },
         { "name": "notes", "type": "JSON" },
         { "name": "created_at", "type": "Fecha/hora", "auto": true },

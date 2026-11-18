@@ -104,9 +104,35 @@ function ScrollZoomOnClick() {
   return null;
 }
 
+/** A site that came without coordinates is drawn at the centre of its municipality/department. */
+const isApproximate = (site: MapSite) => !!site.location_precision && site.location_precision !== "EXACT";
+
+/**
+ * Sites placed by their admin area all share one point; drawn as they are, only the top one could
+ * be clicked. Fan them out on a small spiral around it (a point on the map for an approximate
+ * site is a place in an area, not a location, so a kilometre or two changes nothing).
+ */
+const spreadApproximate = (sites: MapSite[]): MapSite[] => {
+  const seen = new Map<string, number>();
+  return sites.map((site) => {
+    if (!isApproximate(site)) return site;
+    const key = `${site.latitude},${site.longitude}`;
+    const n = seen.get(key) ?? 0;
+    seen.set(key, n + 1);
+    if (n === 0) return site;
+    const angle = n * 2.399963; // golden angle
+    const radius = 0.012 * Math.sqrt(n);
+    return {
+      ...site,
+      latitude: (site.latitude as number) + radius * Math.sin(angle),
+      longitude: (site.longitude as number) + radius * Math.cos(angle),
+    };
+  });
+};
+
 export default function LeafletMap({ sites, selectedSiteId, onSelectSite, projectColors, siteColors }: LeafletMapProps) {
   const t = useTranslations("map");
-  const coordinates = sites.filter(isRenderableCoordinate);
+  const coordinates = spreadApproximate(sites.filter(isRenderableCoordinate));
 
   if (!coordinates.length) {
     return (
@@ -127,18 +153,21 @@ export default function LeafletMap({ sites, selectedSiteId, onSelectSite, projec
       <FollowSelection sites={coordinates} selectedSiteId={selectedSiteId} />
       {coordinates.map((site) => {
         const selected = site.id === selectedSiteId;
+        const approximate = isApproximate(site);
         const fillColor = siteColors?.[site.id] ?? projectColors?.[site.project_id] ?? DEFAULT_COLOR;
 
         return (
           <CircleMarker
             key={site.id}
             center={[site.latitude as number, site.longitude as number]}
-            radius={selected ? 10 : 7}
+            radius={selected ? 10 : approximate ? 9 : 7}
             pathOptions={{
-              color: selected ? "#0f172a" : "#ffffff",
+              // Approximate: a dashed ring and a paler fill, so it does not read as a measured point.
+              color: selected ? "#0f172a" : approximate ? fillColor : "#ffffff",
               weight: selected ? 3 : 2,
+              dashArray: approximate ? "3 3" : undefined,
               fillColor,
-              fillOpacity: selected ? 0.95 : 0.85,
+              fillOpacity: selected ? 0.95 : approximate ? 0.35 : 0.85,
             }}
             eventHandlers={{
               click: () => onSelectSite(site.id),
@@ -149,9 +178,18 @@ export default function LeafletMap({ sites, selectedSiteId, onSelectSite, projec
                 <p className="text-sm font-semibold text-gray-900">{site.site_code}</p>
                 <p className="mt-1 text-xs text-gray-500">{site.project_name ?? t("projectFallback", { id: site.project_id })}</p>
                 <div className="mt-2 space-y-1 text-xs text-gray-600">
-                  <p>
-                    <span className="font-medium">{t("popup.coordinates")}</span> {site.latitude}, {site.longitude}
-                  </p>
+                  {approximate ? (
+                    <p>
+                      <span className="font-medium">{t("popup.approximate")}</span>{" "}
+                      {t(site.location_precision === "ADMIN_1" ? "popup.centreOfAdmin1" : "popup.centreOfAdmin2", {
+                        area: (site.location_precision === "ADMIN_1" ? site.admin_1 : site.admin_2) ?? "",
+                      })}
+                    </p>
+                  ) : (
+                    <p>
+                      <span className="font-medium">{t("popup.coordinates")}</span> {site.latitude}, {site.longitude}
+                    </p>
+                  )}
                   <p>
                     <span className="font-medium">{t("popup.measurements")}</span> {site.measurement_count ?? 0}
                   </p>

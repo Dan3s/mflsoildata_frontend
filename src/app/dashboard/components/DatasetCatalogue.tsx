@@ -7,6 +7,7 @@ import { Search, X, Loader2, Database, ShieldCheck, Pencil, Check, Globe, Tag, L
 import { ApiError, dashboardService, datasetService, downloadService } from "@/app/services";
 import KeywordsPicker, { keywordLabels, toTerms } from "./KeywordsPicker";
 import MatrixBadge from "./MatrixBadge";
+import { LicenseSelect } from "./LicenseSelect";
 import { yearMatches } from "./datasetYear";
 import type {
   AgrovocTerm,
@@ -277,16 +278,18 @@ function DatasetRow({ item, onOpen, query, accessible }: { item: DatasetCatalogu
 
 // ── Detail / edit modal ───────────────────────────────────────────────────────
 
-const CSV_FIELDS = new Set(["expected_matrices", "authorized_users", "related_publications"]);
+const CSV_FIELDS = new Set(["expected_matrices", "authorized_users", "related_publications", "sampling_type"]);
 
 /** Filled by the reviewing team only. The API returns 403 if a plain editor sends them. */
 const QC_FIELDS = new Set(["quality_controlled", "qc_status", "qc_date", "qc_by", "qc_notes", "data_last_updated"]);
 
+const SAMPLING_TYPES = ["FARM_COMPOSITE", "SINGLE_POINT"];
+
 const READ_SECTIONS: { key: string; fields: string[] }[] = [
   { key: "findable", fields: ["title", "abstract", "version", "persistent_id", "keywords", "related_publications"] },
-  { key: "coverage", fields: ["temporal_coverage_start", "temporal_coverage_end", "spatial_coverage", "spatial_data_type", "expected_matrices", "expected_variables", "sampling_design"] },
+  { key: "coverage", fields: ["temporal_coverage_start", "temporal_coverage_end", "spatial_coverage", "spatial_data_type", "sampling_type", "expected_matrices", "expected_variables", "sampling_design"] },
   { key: "access", fields: ["access_level", "authorized_users", "embargo_until", "license", "access_conditions"] },
-  { key: "reuse", fields: ["data_source", "provenance", "methodology", "citation", "usage_notes", "contact_name", "contact_email", "contact_name_2", "contact_email_2"] },
+  { key: "reuse", fields: ["data_source", "research_group", "provenance", "methodology", "citation", "usage_notes", "contact_name", "contact_email", "contact_name_2", "contact_email_2"] },
   { key: "qc", fields: ["quality_controlled", "qc_status", "qc_date", "qc_by", "qc_notes", "data_last_updated"] },
 ];
 
@@ -474,6 +477,7 @@ function DatasetDetailModal({
     if (field === "quality_controlled") return v ? "✔" : t("detail.empty");
     if (field === "access_level") return t(`access.${v as AccessLevel}`);
     if (field === "qc_status") return t(`qcStatus.${v as QcStatus}`);
+    if (field === "sampling_type" && Array.isArray(v)) return v.map((c) => (t.has(`samplingTypes.${c}`) ? t(`samplingTypes.${c}`) : String(c))).join(", ");
     if (field === "keywords") return keywordLabels(v as never) .join(", ") || t("detail.empty");
     if (Array.isArray(v)) return v.join(", ");
     return String(v);
@@ -552,6 +556,26 @@ function DatasetDetailModal({
                           <select value={String(form[field] ?? "")} onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value }))} className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 px-2 text-sm">
                             {ACCESS_LEVELS.map((a) => <option key={a} value={a}>{t(`access.${a}`)}</option>)}
                           </select>
+                        ) : field === "sampling_type" ? (
+                          <div className="space-y-1.5 pt-1">
+                            {SAMPLING_TYPES.map((g) => {
+                              const chosen = String(form[field] ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+                              const checked = chosen.includes(g);
+                              return (
+                                <label key={g} className="flex items-center gap-2 text-sm text-gray-800">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => setForm((p) => ({ ...p, [field]: SAMPLING_TYPES.filter((x) => (x === g ? !checked : chosen.includes(x))).join(",") }))}
+                                    className="accent-brand-700"
+                                  />
+                                  {t(`samplingTypes.${g}`)}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        ) : field === "license" ? (
+                          <LicenseSelect value={String(form[field] ?? "")} onChange={(v) => setForm((p) => ({ ...p, [field]: v }))} />
                         ) : field === "qc_status" ? (
                           <select value={String(form[field] ?? "")} onChange={(e) => setForm((p) => ({ ...p, [field]: e.target.value }))} className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 px-2 text-sm">
                             {QC_STATUSES.map((q) => <option key={q} value={q}>{t(`qcStatus.${q}`)}</option>)}
